@@ -291,6 +291,139 @@ function monthName(date) {
   return date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function getFleetInfo(fleetCode) {
+  const record = fleet.find((item) => String(item.codigo) === String(fleetCode));
+  return {
+    descricao: record?.descricao || "-",
+    especialidade: record?.especialidade || record?.agrupamento || "-",
+  };
+}
+
+function getVisibleScheduleRange() {
+  if (scheduleView === "week") {
+    const start = startOfWeek(scheduleAnchor);
+    return { start: toDateKey(start), end: toDateKey(addDays(start, 6)) };
+  }
+
+  const start = startOfMonth(scheduleAnchor);
+  const end = new Date(scheduleAnchor.getFullYear(), scheduleAnchor.getMonth() + 1, 0);
+  return { start: toDateKey(start), end: toDateKey(end) };
+}
+
+function getVisibleScheduleItems() {
+  const { start, end } = getVisibleScheduleRange();
+  return scheduleItems
+    .filter((item) => item.date >= start && item.date <= end)
+    .sort((a, b) => {
+      const byDate = a.date.localeCompare(b.date);
+      if (byDate) return byDate;
+      return String(a.fleet).localeCompare(String(b.fleet));
+    });
+}
+
+function buildSchedulePrintHtml() {
+  const { start, end } = getVisibleScheduleRange();
+  const period = `${formatDate(start)} a ${formatDate(end)}`;
+  const generatedAt = new Date().toLocaleString("pt-BR");
+  const rows = getVisibleScheduleItems();
+
+  const tableRows = rows.length
+    ? rows
+        .map((item) => {
+          const info = getFleetInfo(item.fleet);
+          const status = item.done ? "REALIZADA" : "PENDENTE";
+          const result = item.result ? `<br><span style="font-size: 9px; color: #555; font-weight: bold;">(Res: ${escapeHtml(item.result)})</span>` : "";
+          return `
+            <tr>
+              <td class="text-center" style="font-weight: bold;">${escapeHtml(item.fleet)}</td>
+              <td>${escapeHtml(info.descricao)}</td>
+              <td>${escapeHtml(info.especialidade)}</td>
+              <td>${escapeHtml(item.compartment)}</td>
+              <td>${escapeHtml(item.result || "-")}</td>
+              <td class="text-center">${formatDate(item.date).slice(0, 5)}</td>
+              <td class="text-center">${status}${result}</td>
+            </tr>
+          `;
+        })
+        .join("")
+    : `<tr><td colspan="7" class="text-center" style="padding: 30px; font-weight: bold;">Nenhum servico agendado.</td></tr>`;
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Programacao Troca de Oleo</title>
+  <style>
+    body { font-family: Calibri, Arial, sans-serif; font-size: 11px; color: #333; margin: 0; padding: 20px; background-color: #f4f6f9; }
+    .no-print { display: flex; justify-content: space-between; align-items: center; background-color: #fff; padding: 15px 20px; border-radius: 8px; margin-bottom: 25px; border: 1px solid #dee2e6; box-shadow: 0 4px 6px rgba(0,0,0,0.05); max-width: 794px; margin-left: auto; margin-right: auto; }
+    .btn-print { background-color: #0d6efd; color: white; border: none; padding: 10px 20px; font-weight: bold; border-radius: 5px; cursor: pointer; font-size: 14px; box-shadow: 0 2px 4px rgba(13,110,253,0.3); }
+    .folha-a4 { background-color: #fff; padding: 25px; box-shadow: 0 0 10px rgba(0,0,0,0.1); border-radius: 5px; max-width: 794px; margin: 0 auto; min-height: 1123px; }
+    .header { text-align: center; margin-bottom: 15px; border-bottom: 2px solid #000; padding-bottom: 8px; }
+    .header h2 { margin: 0; font-size: 16px; text-transform: uppercase; }
+    .header p { margin: 2px 0; font-size: 10px; color: #555; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; word-wrap: break-word; }
+    th, td { border: 1px solid #000; padding: 4px 5px; text-align: left; vertical-align: middle; font-size: 10px; line-height: 1.2; }
+    th { background-color: #f0f0f0; font-weight: bold; text-transform: uppercase; font-size: 9.5px; text-align: center; }
+    .text-center { text-align: center; }
+    @media print {
+      body { padding: 0; background-color: #fff; }
+      .no-print { display: none !important; }
+      .folha-a4 { padding: 0; box-shadow: none; border-radius: 0; min-height: auto; max-width: 100%; }
+      th { background-color: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      @page { size: A4 portrait; margin: 1cm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <p style="margin: 0; font-size: 13px; color: #555;">
+      <strong>O relatorio esta pronto.</strong><br>
+      <span style="font-size: 11px;">Use o botao para imprimir ou salvar em PDF. (Modo: A4 Retrato)</span>
+    </p>
+    <button class="btn-print" onclick="window.print()">Imprimir PDF</button>
+  </div>
+  <div class="folha-a4">
+    <div class="header">
+      <h2>Programacao Troca de Oleo</h2>
+      <p>CRV INDUSTRIAL | Periodo: ${escapeHtml(period)}</p>
+      <p>Gerado em: ${escapeHtml(generatedAt)}</p>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 10%;">Frota</th>
+          <th style="width: 24%;">Descricao da Maquina</th>
+          <th style="width: 15%;">Especialidade</th>
+          <th style="width: 16%;">Servico(s)</th>
+          <th style="width: 15%;">Obs</th>
+          <th style="width: 10%;">Data</th>
+          <th style="width: 10%;">Status</th>
+        </tr>
+      </thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+  </div>
+</body>
+</html>`;
+}
+
+function openSchedulePrintReport() {
+  const reportWindow = window.open("", "_blank");
+  if (!reportWindow) return;
+  reportWindow.document.open();
+  reportWindow.document.write(buildSchedulePrintHtml());
+  reportWindow.document.close();
+}
+
 function renderScheduleItem(item) {
   const status = item.done ? "REALIZADA" : "PENDENTE";
   const resultLabel = item.result ? `<em>${item.result}</em>` : "";
@@ -1110,6 +1243,8 @@ document.querySelector("#next-period").addEventListener("click", () => {
   scheduleAnchor = scheduleView === "week" ? addDays(scheduleAnchor, 7) : new Date(scheduleAnchor.getFullYear(), scheduleAnchor.getMonth() + 1, 1);
   renderSchedule();
 });
+
+document.querySelector("#print-schedule").addEventListener("click", openSchedulePrintReport);
 
 document.querySelector("#schedule-add-form").addEventListener("submit", async (event) => {
   event.preventDefault();
