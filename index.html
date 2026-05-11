@@ -342,30 +342,37 @@
       </dialog>
 
       <section class="view" id="results">
-        <div class="result-layout">
-          <section class="panel">
-            <div class="panel-header">
-              <h2>Fila de anomalias</h2>
-              <span id="results-count">0 pendentes</span>
-            </div>
-            <div class="result-queue" id="result-queue"></div>
-          </section>
-
-          <form class="panel form-panel" id="result-detail-form">
-            <div class="panel-header">
-              <h2>Detalhar ocorrencia</h2>
-              <span id="result-form-status">Selecione uma frota</span>
-            </div>
-            <input id="result-service-id" type="hidden" />
-            <label>Frota <input id="result-fleet" readonly /></label>
-            <label>Componente <input id="result-compartment" readonly /></label>
-            <label>Classificacao <select id="result-classification"><option>Anomalia</option><option>Critico</option></select></label>
-            <label>O que foi identificado <textarea id="result-description" placeholder="Descreva a anomalia ou criticidade encontrada"></textarea></label>
-            <label>Acao recomendada <textarea id="result-action" placeholder="Informe inspecao, troca, recoleta ou outra acao"></textarea></label>
-            <button type="submit" class="primary-button">Salvar ocorrencia</button>
-          </form>
-        </div>
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Fila de anomalias</h2>
+            <span id="results-count">0 pendentes</span>
+          </div>
+          <div class="result-queue" id="result-queue"></div>
+        </section>
       </section>
+
+      <dialog class="service-modal result-modal" id="result-modal">
+        <form class="service-shell" id="result-detail-form">
+          <header class="service-modal-header">
+            <h2>Detalhar ocorrencia</h2>
+            <button class="modal-close-icon" id="close-result-modal" type="button" aria-label="Fechar">×</button>
+          </header>
+          <div class="service-body">
+            <strong class="service-fleet-code" id="result-fleet-title">Frota</strong>
+            <span id="result-form-status">Selecione uma frota</span>
+            <input id="result-source" type="hidden" />
+            <input id="result-service-id" type="hidden" />
+            <section class="service-section">
+              <label>Frota <input id="result-fleet" readonly /></label>
+              <label>Componente <input id="result-compartment" readonly /></label>
+              <label>Classificacao <select id="result-classification"><option>Anomalia</option><option>Critico</option></select></label>
+              <label>O que foi identificado <textarea id="result-description" placeholder="Descreva a anomalia ou criticidade encontrada"></textarea></label>
+              <label>Acao recomendada <textarea id="result-action" placeholder="Informe inspecao, troca, recoleta ou outra acao"></textarea></label>
+            </section>
+            <button type="submit" class="primary-button">Salvar ocorrencia</button>
+          </div>
+        </form>
+      </dialog>
 
       </div>
     </main>

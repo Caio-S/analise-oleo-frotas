@@ -1238,6 +1238,13 @@ textarea {
   font-size: 13px;
 }
 
+.result-card small {
+  display: block;
+  margin-top: 5px;
+  color: var(--primary);
+  font-weight: 700;
+}
+
 .result-card b {
   border-radius: 999px;
   padding: 5px 10px;
@@ -1249,6 +1256,10 @@ textarea {
 .result-card.critical b {
   background: #fee4e2;
   color: var(--danger);
+}
+
+.result-modal {
+  width: min(440px, calc(100% - 24px));
 }
 
 .form-panel {

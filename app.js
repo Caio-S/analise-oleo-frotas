@@ -21,6 +21,7 @@ let priorities = [];
 let resultDistribution = [];
 let analyses = [];
 let filteredAnalyses = [];
+let reportResultDetails = {};
 let scheduleView = "week";
 let scheduleAnchor = new Date();
 let selectedScheduleDate = "";
@@ -395,25 +396,66 @@ function isActionableResult(item) {
   return item.result === "Anomalia" || item.result === "Critico";
 }
 
+function isReportAnomaly(item) {
+  return item.classificacao === "Critico" || item.classificacao === "Atencao";
+}
+
+function reportResultId(item, index) {
+  return `report-${item.cod_frota}-${item.data_coleta}-${item.compartimento}-${index}`.replace(/\s+/g, "-");
+}
+
+function getUnifiedResults() {
+  const scheduled = scheduleItems.filter(isActionableResult).map((item) => ({
+    source: "schedule",
+    id: item.id,
+    fleet: item.fleet,
+    date: item.date,
+    compartment: item.compartment,
+    classification: item.result,
+    description: item.resultDescription || "",
+    action: item.resultAction || "",
+    origin: "Programacao",
+  }));
+
+  const report = analyses.filter(isReportAnomaly).map((item, index) => {
+    const id = reportResultId(item, index);
+    const detail = reportResultDetails[id] || {};
+    return {
+      source: "report",
+      id,
+      fleet: item.cod_frota,
+      date: item.data_coleta,
+      compartment: item.compartimento,
+      classification: item.classificacao === "Critico" ? "Critico" : "Anomalia",
+      description: detail.description || item.resultado,
+      action: detail.action || "",
+      origin: "Relatorio CHB",
+    };
+  });
+
+  return [...scheduled, ...report].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+}
+
 function renderResultsQueue() {
-  const queue = scheduleItems.filter(isActionableResult);
+  const queue = getUnifiedResults();
   const list = document.querySelector("#result-queue");
   document.querySelector("#results-count").textContent = `${queue.length} pendente(s)`;
 
   if (!queue.length) {
-    list.innerHTML = `<div class="empty-state">Nenhuma anomalia ou criticidade registrada na programacao.</div>`;
+    list.innerHTML = `<div class="empty-state">Nenhuma anomalia ou criticidade registrada.</div>`;
     return;
   }
 
   list.innerHTML = queue
     .map(
       (item) => `
-        <button class="result-card ${item.result === "Critico" ? "critical" : "anomaly"}" type="button" data-result-id="${item.id}">
+        <button class="result-card ${item.classification === "Critico" ? "critical" : "anomaly"}" type="button" data-result-source="${item.source}" data-result-id="${item.id}">
           <div>
             <strong>${item.fleet}</strong>
             <span>${formatDate(item.date)} - ${item.compartment}</span>
+            <small>${item.origin}</small>
           </div>
-          <b>${item.result}</b>
+          <b>${item.classification}</b>
         </button>
       `
     )
@@ -434,16 +476,19 @@ function applyUserRole(email) {
   });
 }
 
-function selectResultService(id) {
-  const item = scheduleItems.find((entry) => entry.id === id);
+function selectResultService(source, id) {
+  const item = getUnifiedResults().find((entry) => entry.source === source && String(entry.id) === String(id));
   if (!item) return;
+  document.querySelector("#result-source").value = item.source;
   document.querySelector("#result-service-id").value = item.id;
+  document.querySelector("#result-fleet-title").textContent = item.fleet;
   document.querySelector("#result-fleet").value = item.fleet;
   document.querySelector("#result-compartment").value = item.compartment;
-  document.querySelector("#result-classification").value = item.result;
-  document.querySelector("#result-description").value = item.resultDescription || "";
-  document.querySelector("#result-action").value = item.resultAction || "";
-  document.querySelector("#result-form-status").textContent = `${item.result} selecionada`;
+  document.querySelector("#result-classification").value = item.classification;
+  document.querySelector("#result-description").value = item.description || "";
+  document.querySelector("#result-action").value = item.action || "";
+  document.querySelector("#result-form-status").textContent = `${item.classification} - ${item.origin}`;
+  document.querySelector("#result-modal").showModal();
 }
 
 function scheduleFromDb(record) {
@@ -605,6 +650,7 @@ function updateDashboardFromAnalyses() {
   renderRisks();
   renderPriorities();
   renderResultDistribution();
+  renderResultsQueue();
 }
 
 function applyDateFilter() {
@@ -1125,27 +1171,48 @@ document.querySelector("#service-form").addEventListener("submit", async (event)
 document.querySelector("#result-queue").addEventListener("click", (event) => {
   const card = event.target.closest("[data-result-id]");
   if (!card) return;
-  selectResultService(Number(card.dataset.resultId));
+  selectResultService(card.dataset.resultSource, card.dataset.resultId);
+});
+
+document.querySelector("#close-result-modal").addEventListener("click", () => {
+  document.querySelector("#result-modal").close();
+});
+
+document.querySelector("#result-modal").addEventListener("click", (event) => {
+  if (event.target.id === "result-modal") {
+    event.currentTarget.close();
+  }
 });
 
 document.querySelector("#result-detail-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const id = Number(document.querySelector("#result-service-id").value);
-  const item = scheduleItems.find((entry) => entry.id === id);
-  if (!item) return;
+  const source = document.querySelector("#result-source").value;
+  const id = document.querySelector("#result-service-id").value;
 
-  item.result = document.querySelector("#result-classification").value;
-  item.resultDescription = document.querySelector("#result-description").value.trim();
-  item.resultAction = document.querySelector("#result-action").value.trim();
-  try {
-    await saveScheduleItem(item);
-  } catch (error) {
-    document.querySelector("#result-form-status").textContent = `Erro ao salvar: ${error.message}`;
-    return;
+  if (source === "schedule") {
+    const item = scheduleItems.find((entry) => String(entry.id) === String(id));
+    if (!item) return;
+    item.result = document.querySelector("#result-classification").value;
+    item.resultDescription = document.querySelector("#result-description").value.trim();
+    item.resultAction = document.querySelector("#result-action").value.trim();
+    try {
+      await saveScheduleItem(item);
+    } catch (error) {
+      document.querySelector("#result-form-status").textContent = `Erro ao salvar: ${error.message}`;
+      return;
+    }
+  } else {
+    reportResultDetails[id] = {
+      classification: document.querySelector("#result-classification").value,
+      description: document.querySelector("#result-description").value.trim(),
+      action: document.querySelector("#result-action").value.trim(),
+    };
   }
+
   document.querySelector("#result-form-status").textContent = "Ocorrencia salva";
   renderResultsQueue();
   renderSchedule();
+  document.querySelector("#result-modal").close();
 });
 
 renderSchedule();
