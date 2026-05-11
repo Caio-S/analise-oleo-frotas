@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Controle de Analise de Oleo de Frotas</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <aside class="sidebar app-private" hidden>
+      <div class="brand">
+        <img class="brand-logo" src="assets/logocrv.png" alt="CRV" />
+        <div>
+          <strong>Controle de Analise</strong>
+          <span>Controle de frotas</span>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="Navegacao principal">
+        <button class="nav-item active" data-view="dashboard">Dashboard</button>
+        <button class="nav-item" data-view="fleet">Frota</button>
+        <button class="nav-item" data-view="collections">Programacao</button>
+        <button class="nav-item" data-view="results">Resultados</button>
+      </nav>
+    </aside>
+
+    <main class="app-shell">
+      <header class="topbar app-private" hidden>
+        <div>
+          <p class="eyebrow">Controle de frotas</p>
+          <h1 id="page-title">Dashboard operacional</h1>
+        </div>
+        <div class="topbar-actions">
+          <span class="session-pill" id="session-status">Nao conectado</span>
+          <button class="secondary-button" id="logout-button" type="button" hidden>Sair</button>
+        </div>
+      </header>
+
+      <section class="auth-panel" id="auth-panel">
+        <form class="panel login-panel" id="login-form">
+          <img class="login-logo" src="assets/logocrv.png" alt="CRV" />
+          <div class="login-heading">
+            <p class="eyebrow">Controle de frotas</p>
+            <h2>Analise de oleo</h2>
+            <span>Acesso interno para acompanhamento de coletas, laudos e criticidades.</span>
+          </div>
+          <div class="login-fields">
+            <label>Usuario <input id="login-email" value="admin@teste.com" autocomplete="username" /></label>
+            <label>Senha <input id="login-password" type="password" autocomplete="current-password" /></label>
+          </div>
+          <button class="primary-button" type="submit">Entrar</button>
+          <span id="login-message"></span>
+        </form>
+      </section>
+
+      <div class="app-private" hidden>
+      <section class="view active" id="dashboard">
+        <div class="metric-grid">
+          <article class="metric">
+            <span>Analises no relatorio</span>
+            <strong id="metric-total-analyses">0</strong>
+            <small id="metric-report-status">Carregando relatorio CHB...</small>
+          </article>
+          <article class="metric">
+            <span>Media por dia</span>
+            <strong id="metric-daily-average">0</strong>
+            <small>Com base nas datas de coleta</small>
+          </article>
+          <article class="metric warning">
+            <span>Analises em atencao</span>
+            <strong id="metric-attention">0</strong>
+            <small id="metric-attention-rate">0% da amostragem</small>
+          </article>
+          <article class="metric danger">
+            <span>Criticas abertas</span>
+            <strong id="metric-critical">0</strong>
+            <small id="metric-critical-rate">0% da amostragem</small>
+          </article>
+        </div>
+
+        <section class="panel report-controls">
+          <div class="panel-header">
+            <h2>Relatorio CHB</h2>
+            <span id="report-file-name">Base padrao</span>
+          </div>
+          <div class="report-toolbar">
+            <label>
+              Atualizar relatorio
+              <input id="analysis-upload" type="file" accept=".xlsx,.xls,.csv" />
+            </label>
+            <label>
+              Data inicial
+              <input id="date-min" type="date" />
+            </label>
+            <label>
+              Data final
+              <input id="date-max" type="date" />
+            </label>
+            <button class="secondary-button" id="clear-date-filter" type="button">Limpar filtro</button>
+          </div>
+        </section>
+
+        <div class="dashboard-grid">
+          <section class="panel wide">
+            <div class="panel-header">
+              <h2>Coletas por dia</h2>
+              <span>Relatorio CHB</span>
+            </div>
+            <div class="bar-chart" id="collection-chart"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Incidencia critica</h2>
+              <span>Por compartimento</span>
+            </div>
+            <div class="risk-list" id="risk-list"></div>
+          </section>
+
+          <section class="panel wide">
+            <div class="panel-header">
+              <h2>Prioridades da manutencao</h2>
+              <span>Analises criticas</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Frota</th>
+                    <th>Componente</th>
+                    <th>Ocorrencia</th>
+                    <th>Ultima coleta</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="priority-table"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Distribuicao dos resultados</h2>
+              <span>Relatorio atual</span>
+            </div>
+            <div class="risk-list" id="result-distribution"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="fleet">
+        <div class="metric-grid fleet-metrics">
+          <article class="metric">
+            <span>Total de frotas</span>
+            <strong id="fleet-total">0</strong>
+            <small id="fleet-load-status">Carregando base de frotas...</small>
+          </article>
+          <article class="panel fleet-summary">
+            <div class="panel-header">
+              <h2>Maiores agrupamentos</h2>
+              <span>Base atual</span>
+            </div>
+            <div class="risk-list" id="fleet-groups"></div>
+          </article>
+        </div>
+        <div class="section-toolbar">
+          <label>
+            Buscar frota
+            <input id="fleet-search" type="search" placeholder="Codigo, agrupamento, especialidade ou descricao" />
+          </label>
+        </div>
+        <form class="panel fleet-form admin-only" id="fleet-form">
+          <div class="panel-header">
+            <h2>Adicionar nova frota</h2>
+            <span id="fleet-form-message">Gravacao no Supabase</span>
+          </div>
+          <div class="fleet-form-grid">
+            <label>Codigo da frota <input id="new-cod-frota" required /></label>
+            <label>Agrupamento <input id="new-agrupamento" placeholder="CAMINHAO, TRATOR, REBOQUE..." /></label>
+            <label>Especialidade <input id="new-especialidade" placeholder="CAMINHAO - CANAVIEIRO" /></label>
+            <label>Descricao <input id="new-descricao-frota" required placeholder="Modelo, placa ou identificacao" /></label>
+            <button class="primary-button" type="submit">Adicionar frota</button>
+          </div>
+        </form>
+        <div class="table-wrap panel-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Codigo</th>
+                <th>Agrupamento</th>
+                <th>Especialidade</th>
+                <th>Descricao</th>
+                <th>Risco</th>
+              </tr>
+            </thead>
+            <tbody id="fleet-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="view" id="collections">
+        <section class="panel schedule-controls">
+          <div class="panel-header">
+            <h2>Programacao de coletas</h2>
+            <span id="schedule-period-label">Semana atual</span>
+          </div>
+          <div class="schedule-toolbar">
+            <div class="segmented-control" aria-label="Modo de visualizacao">
+              <button class="segment active" type="button" data-schedule-view="week">Semanal</button>
+              <button class="segment" type="button" data-schedule-view="month">Mensal</button>
+            </div>
+            <button class="secondary-button" id="prev-period" type="button">Anterior</button>
+            <button class="secondary-button" id="today-period" type="button">Hoje</button>
+            <button class="secondary-button" id="next-period" type="button">Proximo</button>
+          </div>
+        </section>
+
+        <section class="panel schedule-add-panel admin-only">
+          <div class="panel-header">
+            <h2>Agendar coletas</h2>
+            <span id="schedule-add-message">Informe uma frota ou uma lista em lote</span>
+          </div>
+          <form class="schedule-add-form" id="schedule-add-form">
+            <label>
+              Data do servico
+              <input id="schedule-date" type="date" required />
+            </label>
+            <label>
+              Compartimento/servico
+              <input id="schedule-compartment" value="CARTER MOTOR" required />
+            </label>
+            <label>
+              Frota unica
+              <input id="schedule-single-fleet" placeholder="60529" />
+            </label>
+            <button class="primary-button" type="submit">Agendar</button>
+            <button class="secondary-button" id="open-batch-modal" type="button">Programar lote</button>
+          </form>
+        </section>
+
+        <div class="schedule-grid" id="schedule-grid"></div>
+      </section>
+
+      <dialog class="schedule-modal" id="schedule-modal">
+        <div class="modal-shell">
+          <div class="panel-header">
+            <div>
+              <h2 id="schedule-modal-title">Servicos do dia</h2>
+              <span id="schedule-modal-subtitle">Programacao</span>
+            </div>
+            <button class="icon-button" id="close-schedule-modal" type="button">Fechar</button>
+          </div>
+          <div class="modal-task-list" id="modal-task-list"></div>
+        </div>
+      </dialog>
+
+      <dialog class="schedule-modal" id="batch-modal">
+        <form class="modal-shell" id="batch-schedule-form">
+          <div class="panel-header">
+            <div>
+              <h2>Programacao em lote</h2>
+              <span id="batch-message">Cole a lista de frotas e escolha os dias</span>
+            </div>
+            <button class="icon-button" id="close-batch-modal" type="button">Fechar</button>
+          </div>
+          <div class="batch-grid">
+            <label>
+              Data inicial
+              <input id="batch-start-date" type="date" required />
+            </label>
+            <label>
+              Compartimento/servico
+              <input id="batch-compartment" value="CARTER MOTOR" required />
+            </label>
+            <label class="batch-list-field">
+              Lista de frotas
+              <textarea id="batch-fleets" placeholder="60529&#10;62248&#10;62267" required></textarea>
+            </label>
+          </div>
+          <div class="weekday-picker">
+            <label><input type="checkbox" value="1" checked />Seg</label>
+            <label><input type="checkbox" value="2" checked />Ter</label>
+            <label><input type="checkbox" value="3" checked />Qua</label>
+            <label><input type="checkbox" value="4" />Qui</label>
+            <label><input type="checkbox" value="5" />Sex</label>
+            <label><input type="checkbox" value="6" />Sab</label>
+          </div>
+          <button class="primary-button" type="submit">Distribuir programacao</button>
+        </form>
+      </dialog>
+
+      <dialog class="service-modal" id="service-modal">
+        <form class="service-shell" id="service-form">
+          <header class="service-modal-header">
+            <h2>Gestao de Servico</h2>
+            <button class="modal-close-icon" id="close-service-modal" type="button" aria-label="Fechar">×</button>
+          </header>
+          <div class="service-body">
+            <strong class="service-fleet-code" id="service-fleet-code">60053</strong>
+            <div class="service-divider"></div>
+
+            <section class="service-section">
+              <label>
+                <span>Analise de oleo</span>
+                <input id="service-compartment" />
+              </label>
+              <label>
+                <select id="service-status">
+                  <option value="Pendente">PENDENTE</option>
+                  <option value="Realizada">REALIZADA</option>
+                </select>
+              </label>
+              <label>
+                <span>Resultado da Analise</span>
+                <select id="service-result">
+                  <option value="">-- Selecione o Resultado --</option>
+                  <option>Normal</option>
+                  <option>Anomalia</option>
+                  <option>Critico</option>
+                </select>
+              </label>
+            </section>
+
+            <section class="service-section service-completion">
+              <label>
+                <span>Data de Conclusao</span>
+                <input id="service-completion-date" type="date" />
+              </label>
+              <label>
+                <span>Local da Execucao</span>
+                <select id="service-location">
+                  <option>Base (Oficina)</option>
+                  <option>Campo</option>
+                  <option>Terceiro</option>
+                </select>
+              </label>
+            </section>
+
+            <button class="primary-button" type="submit">Salvar servico</button>
+          </div>
+        </form>
+      </dialog>
+
+      <section class="view" id="results">
+        <div class="result-layout">
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Fila de anomalias</h2>
+              <span id="results-count">0 pendentes</span>
+            </div>
+            <div class="result-queue" id="result-queue"></div>
+          </section>
+
+          <form class="panel form-panel" id="result-detail-form">
+            <div class="panel-header">
+              <h2>Detalhar ocorrencia</h2>
+              <span id="result-form-status">Selecione uma frota</span>
+            </div>
+            <input id="result-service-id" type="hidden" />
+            <label>Frota <input id="result-fleet" readonly /></label>
+            <label>Componente <input id="result-compartment" readonly /></label>
+            <label>Classificacao <select id="result-classification"><option>Anomalia</option><option>Critico</option></select></label>
+            <label>O que foi identificado <textarea id="result-description" placeholder="Descreva a anomalia ou criticidade encontrada"></textarea></label>
+            <label>Acao recomendada <textarea id="result-action" placeholder="Informe inspecao, troca, recoleta ou outra acao"></textarea></label>
+            <button type="submit" class="primary-button">Salvar ocorrencia</button>
+          </form>
+        </div>
+      </section>
+
+      </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
