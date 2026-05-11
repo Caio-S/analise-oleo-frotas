@@ -436,8 +436,42 @@ function getUnifiedResults() {
   return [...scheduled, ...report].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 }
 
+function getFilteredResults() {
+  const origin = document.querySelector("#result-filter-origin")?.value || "";
+  const classification = document.querySelector("#result-filter-classification")?.value || "";
+  const compartment = document.querySelector("#result-filter-compartment")?.value || "";
+  const search = (document.querySelector("#result-filter-search")?.value || "").trim().toLowerCase();
+
+  return getUnifiedResults().filter((item) => {
+    if (origin && item.origin !== origin) return false;
+    if (classification && item.classification !== classification) return false;
+    if (compartment && item.compartment !== compartment) return false;
+    if (search) {
+      const haystack = [item.fleet, item.compartment, item.classification, item.description, item.action, item.origin]
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(search)) return false;
+    }
+    return true;
+  });
+}
+
+function updateResultFilterOptions() {
+  const select = document.querySelector("#result-filter-compartment");
+  if (!select) return;
+  const current = select.value;
+  const compartments = [...new Set(getUnifiedResults().map((item) => item.compartment).filter(Boolean))].sort();
+  select.innerHTML = `<option value="">Todos</option>${compartments
+    .map((item) => `<option value="${item}">${item}</option>`)
+    .join("")}`;
+  if (compartments.includes(current)) {
+    select.value = current;
+  }
+}
+
 function renderResultsQueue() {
-  const queue = getUnifiedResults();
+  updateResultFilterOptions();
+  const queue = getFilteredResults();
   const list = document.querySelector("#result-queue");
   document.querySelector("#results-count").textContent = `${queue.length} pendente(s)`;
 
@@ -1172,6 +1206,18 @@ document.querySelector("#result-queue").addEventListener("click", (event) => {
   const card = event.target.closest("[data-result-id]");
   if (!card) return;
   selectResultService(card.dataset.resultSource, card.dataset.resultId);
+});
+
+["#result-filter-origin", "#result-filter-classification", "#result-filter-compartment", "#result-filter-search"].forEach((selector) => {
+  document.querySelector(selector).addEventListener("input", renderResultsQueue);
+});
+
+document.querySelector("#clear-result-filters").addEventListener("click", () => {
+  document.querySelector("#result-filter-origin").value = "";
+  document.querySelector("#result-filter-classification").value = "";
+  document.querySelector("#result-filter-compartment").value = "";
+  document.querySelector("#result-filter-search").value = "";
+  renderResultsQueue();
 });
 
 document.querySelector("#close-result-modal").addEventListener("click", () => {

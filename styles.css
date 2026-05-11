@@ -1209,6 +1209,20 @@ textarea {
   gap: 10px;
 }
 
+.result-filters {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(140px, 0.8fr) minmax(190px, 1fr) minmax(220px, 1.2fr) auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 16px;
+}
+
+.result-filters label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+}
+
 .result-card {
   display: flex;
   align-items: center;
@@ -1343,6 +1357,7 @@ textarea {
   .schedule-grid.month-view,
   .board,
   .result-layout,
+  .result-filters,
   .login-panel {
     grid-template-columns: 1fr;
   }

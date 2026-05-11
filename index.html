@@ -347,6 +347,35 @@
             <h2>Fila de anomalias</h2>
             <span id="results-count">0 pendentes</span>
           </div>
+          <div class="result-filters">
+            <label>
+              Origem
+              <select id="result-filter-origin">
+                <option value="">Todas</option>
+                <option value="Programacao">Programacao</option>
+                <option value="Relatorio CHB">Relatorio CHB</option>
+              </select>
+            </label>
+            <label>
+              Resultado
+              <select id="result-filter-classification">
+                <option value="">Todos</option>
+                <option value="Anomalia">Anomalia</option>
+                <option value="Critico">Critico</option>
+              </select>
+            </label>
+            <label>
+              Compartimento
+              <select id="result-filter-compartment">
+                <option value="">Todos</option>
+              </select>
+            </label>
+            <label>
+              Busca
+              <input id="result-filter-search" type="search" placeholder="Frota, componente ou ocorrencia" />
+            </label>
+            <button class="secondary-button" id="clear-result-filters" type="button">Limpar</button>
+          </div>
           <div class="result-queue" id="result-queue"></div>
         </section>
       </section>
