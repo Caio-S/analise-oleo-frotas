@@ -1086,6 +1086,28 @@ textarea {
   color: var(--muted);
 }
 
+.batch-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  color: var(--muted);
+}
+
+.batch-preview span {
+  display: inline-grid;
+  gap: 2px;
+  min-width: 120px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #f8fafc;
+}
+
+.batch-preview strong {
+  color: var(--ink);
+}
+
 .batch-list-field textarea {
   min-height: 180px;
 }

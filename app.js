@@ -231,6 +231,27 @@ function addDays(date, amount) {
   return next;
 }
 
+function nextAllowedDate(date, weekdays) {
+  let cursor = new Date(date);
+  while (!weekdays.includes(cursor.getDay())) {
+    cursor = addDays(cursor, 1);
+  }
+  return cursor;
+}
+
+function distributeFleetsAcrossWeekdays(fleets, startDate, weekdays) {
+  const sortedWeekdays = [...weekdays].sort((a, b) => a - b);
+  let cursor = nextAllowedDate(new Date(`${startDate}T12:00:00`), sortedWeekdays);
+
+  return fleets.map((fleetCode) => {
+    const date = toDateKey(cursor);
+    let next = addDays(cursor, 1);
+    next = nextAllowedDate(next, sortedWeekdays);
+    cursor = next;
+    return { fleetCode, date };
+  });
+}
+
 function startOfWeek(date) {
   const start = new Date(date);
   const day = start.getDay();
@@ -390,6 +411,38 @@ function openServiceModal(id) {
   document.querySelector("#service-completion-date").value = item.completionDate || item.date;
   document.querySelector("#service-location").value = item.location || "Base (Oficina)";
   document.querySelector("#service-modal").showModal();
+}
+
+function getBatchFormData() {
+  const startDate = document.querySelector("#batch-start-date").value;
+  const compartment = document.querySelector("#batch-compartment").value.trim();
+  const fleets = [...new Set(
+    document.querySelector("#batch-fleets").value
+      .split(/\r?\n|,|;/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  )];
+  const weekdays = [...document.querySelectorAll(".weekday-picker input:checked")].map((input) => Number(input.value));
+  return { startDate, compartment, fleets, weekdays };
+}
+
+function updateBatchPreview() {
+  const preview = document.querySelector("#batch-preview");
+  const { startDate, fleets, weekdays } = getBatchFormData();
+  if (!startDate || !fleets.length || !weekdays.length) {
+    preview.textContent = "Informe data, lista de frotas e dias para ver a previa.";
+    return;
+  }
+
+  const distribution = distributeFleetsAcrossWeekdays(fleets, startDate, weekdays);
+  const grouped = distribution.reduce((summary, item) => {
+    summary[item.date] = (summary[item.date] || 0) + 1;
+    return summary;
+  }, {});
+
+  preview.innerHTML = Object.entries(grouped)
+    .map(([date, count]) => `<span><strong>${formatDate(date)}</strong>${count} frota(s)</span>`)
+    .join("");
 }
 
 function isActionableResult(item) {
@@ -1057,6 +1110,7 @@ document.querySelector("#open-batch-modal").addEventListener("click", () => {
   const date = document.querySelector("#schedule-date").value || toDateKey(scheduleAnchor);
   document.querySelector("#batch-start-date").value = date;
   document.querySelector("#batch-compartment").value = document.querySelector("#schedule-compartment").value || "CARTER MOTOR";
+  updateBatchPreview();
   document.querySelector("#batch-modal").showModal();
 });
 
@@ -1073,39 +1127,26 @@ document.querySelector("#batch-modal").addEventListener("click", (event) => {
 document.querySelector("#batch-schedule-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = document.querySelector("#batch-message");
-  const startDate = document.querySelector("#batch-start-date").value;
-  const compartment = document.querySelector("#batch-compartment").value.trim();
-  const fleets = [...new Set(
-    document.querySelector("#batch-fleets").value
-      .split(/\r?\n|,|;/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-  )];
-  const weekdays = [...document.querySelectorAll(".weekday-picker input:checked")].map((input) => Number(input.value));
+  const { startDate, compartment, fleets, weekdays } = getBatchFormData();
 
   if (!startDate || !compartment || !fleets.length || !weekdays.length) {
     message.textContent = "Informe data, servico, frotas e ao menos um dia da semana.";
     return;
   }
 
-  let cursor = new Date(`${startDate}T12:00:00`);
+  const distribution = distributeFleetsAcrossWeekdays(fleets, startDate, weekdays);
   try {
-    for (const fleetCode of fleets) {
-    while (!weekdays.includes(cursor.getDay())) {
-      cursor = addDays(cursor, 1);
-    }
-
+    for (const entry of distribution) {
       const item = {
       id: nextScheduleId,
-      date: toDateKey(cursor),
-      fleet: fleetCode,
+      date: entry.date,
+      fleet: entry.fleetCode,
       compartment,
       done: false,
       };
       scheduleItems.push(item);
       nextScheduleId += 1;
       await saveScheduleItem(item);
-      cursor = addDays(cursor, 1);
     }
   } catch (error) {
     message.textContent = `Erro ao gravar programacao: ${error.message}`;
@@ -1120,6 +1161,14 @@ document.querySelector("#batch-schedule-form").addEventListener("submit", async 
   document.querySelector("#batch-compartment").value = compartment;
   document.querySelector("#batch-modal").close();
   renderSchedule();
+});
+
+["#batch-start-date", "#batch-fleets"].forEach((selector) => {
+  document.querySelector(selector).addEventListener("input", updateBatchPreview);
+});
+
+document.querySelectorAll(".weekday-picker input").forEach((input) => {
+  input.addEventListener("change", updateBatchPreview);
 });
 
 document.querySelector("#schedule-grid").addEventListener("click", (event) => {
