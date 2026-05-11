@@ -22,6 +22,7 @@ let resultDistribution = [];
 let analyses = [];
 let filteredAnalyses = [];
 let reportResultDetails = {};
+let activeReportKey = "default";
 let scheduleView = "week";
 let scheduleAnchor = new Date();
 let selectedScheduleDate = "";
@@ -480,7 +481,7 @@ function isReportAnomaly(item) {
 }
 
 function reportResultId(item, index) {
-  return `report-${item.cod_frota}-${item.data_coleta}-${item.compartimento}-${index}`.replace(/\s+/g, "-");
+  return `${activeReportKey}-${item.cod_frota}-${item.data_coleta}-${item.compartimento}-${index}`.replace(/\s+/g, "-");
 }
 
 function getUnifiedResults() {
@@ -791,6 +792,8 @@ async function loadAnalysisCsv() {
     const response = await fetch(analysisCsvPath);
     if (!response.ok) throw new Error("Relatorio nao encontrado");
     const text = await response.text();
+    activeReportKey = "default";
+    reportResultDetails = {};
     analyses = parseCsv(text).map(normalizeAnalysisRecord);
     setDefaultDateRange();
     status.textContent = `Relatorio CHB carregado: ${analysisCsvPath}`;
@@ -847,6 +850,8 @@ async function handleAnalysisUpload(event) {
   const extension = file.name.split(".").pop().toLowerCase();
 
   try {
+    activeReportKey = `upload-${file.name}-${file.size}-${file.lastModified}`.replace(/\s+/g, "-");
+    reportResultDetails = {};
     if (extension === "csv") {
       const text = await file.text();
       analyses = parseCsv(text).map(normalizeAnalysisRecord);
