@@ -260,10 +260,18 @@ function distributeFleetsAcrossWeekdays(fleets, startDate, endDate, weekdays) {
   const dates = allowedDatesInRange(startDate, endDate, weekdays);
   if (!dates.length) return [];
 
-  return fleets.map((fleetCode, index) => ({
-    fleetCode,
-    date: dates[index % dates.length],
-  }));
+  const buckets = dates.map((date) => ({ date, count: 0 }));
+
+  return fleets.map((fleetCode) => {
+    buckets.sort((a, b) => {
+      if (a.count !== b.count) return a.count - b.count;
+      return a.date.localeCompare(b.date);
+    });
+
+    const target = buckets[0];
+    target.count += 1;
+    return { fleetCode, date: target.date };
+  });
 }
 
 function startOfWeek(date) {
