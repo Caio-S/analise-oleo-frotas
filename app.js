@@ -28,6 +28,7 @@ let selectedScheduleDate = "";
 let selectedServiceId = null;
 let scheduleDbEnabled = false;
 let currentUserRole = "coletor";
+let batchEndDateTouched = false;
 const scheduleItems = [
   { id: 1, date: "2026-05-04", fleet: "60102", compartment: "CARTER MOTOR", done: true },
   { id: 2, date: "2026-05-04", fleet: "62279", compartment: "CARTER MOTOR", done: false },
@@ -1133,6 +1134,7 @@ document.querySelector("#schedule-add-form").addEventListener("submit", async (e
 
 document.querySelector("#open-batch-modal").addEventListener("click", () => {
   const date = document.querySelector("#schedule-date").value || toDateKey(scheduleAnchor);
+  batchEndDateTouched = false;
   document.querySelector("#batch-start-date").value = date;
   document.querySelector("#batch-end-date").value = toDateKey(addDays(new Date(`${date}T12:00:00`), 6));
   document.querySelector("#batch-compartment").value = document.querySelector("#schedule-compartment").value || "CARTER MOTOR";
@@ -1191,7 +1193,7 @@ document.querySelector("#batch-schedule-form").addEventListener("submit", async 
   }
 
   scheduleAnchor = new Date(`${startDate}T12:00:00`);
-  message.textContent = `${fleets.length} frota(s) distribuidas na semana.`;
+  message.textContent = `${fleets.length} frota(s) distribuidas no periodo.`;
   document.querySelector("#schedule-date").value = startDate;
   document.querySelector("#schedule-compartment").value = compartment;
   event.target.reset();
@@ -1200,8 +1202,23 @@ document.querySelector("#batch-schedule-form").addEventListener("submit", async 
   renderSchedule();
 });
 
-["#batch-start-date", "#batch-end-date", "#batch-fleets"].forEach((selector) => {
-  document.querySelector(selector).addEventListener("input", updateBatchPreview);
+document.querySelector("#batch-start-date").addEventListener("input", () => {
+  const startDate = document.querySelector("#batch-start-date").value;
+  if (startDate && !batchEndDateTouched) {
+    document.querySelector("#batch-end-date").value = toDateKey(addDays(new Date(`${startDate}T12:00:00`), 6));
+  }
+  updateBatchPreview();
+});
+
+document.querySelector("#batch-end-date").addEventListener("input", () => {
+  batchEndDateTouched = true;
+  updateBatchPreview();
+});
+
+document.querySelector("#batch-fleets").addEventListener("input", updateBatchPreview);
+
+document.querySelector("#batch-schedule-form").addEventListener("reset", () => {
+  batchEndDateTouched = false;
 });
 
 document.querySelectorAll(".weekday-picker input").forEach((input) => {
