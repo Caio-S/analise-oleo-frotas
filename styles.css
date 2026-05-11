@@ -1073,7 +1073,7 @@ textarea {
 
 .batch-grid {
   display: grid;
-  grid-template-columns: minmax(160px, 0.7fr) minmax(220px, 1fr) minmax(260px, 1.3fr);
+  grid-template-columns: minmax(150px, 0.6fr) minmax(150px, 0.6fr) minmax(220px, 1fr) minmax(260px, 1.3fr);
   gap: 12px;
   align-items: start;
   margin-bottom: 14px;
@@ -1106,6 +1106,13 @@ textarea {
 
 .batch-preview strong {
   color: var(--ink);
+}
+
+.batch-preview em {
+  width: 100%;
+  color: var(--warning);
+  font-style: normal;
+  font-weight: 700;
 }
 
 .batch-list-field textarea {

@@ -239,17 +239,29 @@ function nextAllowedDate(date, weekdays) {
   return cursor;
 }
 
-function distributeFleetsAcrossWeekdays(fleets, startDate, weekdays) {
+function allowedDatesInRange(startDate, endDate, weekdays) {
   const sortedWeekdays = [...weekdays].sort((a, b) => a - b);
-  let cursor = nextAllowedDate(new Date(`${startDate}T12:00:00`), sortedWeekdays);
+  const start = new Date(`${startDate}T12:00:00`);
+  const end = new Date(`${endDate}T12:00:00`);
+  const dates = [];
+  let cursor = nextAllowedDate(start, sortedWeekdays);
 
-  return fleets.map((fleetCode) => {
-    const date = toDateKey(cursor);
-    let next = addDays(cursor, 1);
-    next = nextAllowedDate(next, sortedWeekdays);
-    cursor = next;
-    return { fleetCode, date };
-  });
+  while (cursor <= end) {
+    dates.push(toDateKey(cursor));
+    cursor = nextAllowedDate(addDays(cursor, 1), sortedWeekdays);
+  }
+
+  return dates;
+}
+
+function distributeFleetsAcrossWeekdays(fleets, startDate, endDate, weekdays) {
+  const dates = allowedDatesInRange(startDate, endDate, weekdays);
+  if (!dates.length) return [];
+
+  return fleets.map((fleetCode, index) => ({
+    fleetCode,
+    date: dates[index % dates.length],
+  }));
 }
 
 function startOfWeek(date) {
@@ -415,6 +427,7 @@ function openServiceModal(id) {
 
 function getBatchFormData() {
   const startDate = document.querySelector("#batch-start-date").value;
+  const endDate = document.querySelector("#batch-end-date").value;
   const compartment = document.querySelector("#batch-compartment").value.trim();
   const fleets = [...new Set(
     document.querySelector("#batch-fleets").value
@@ -423,26 +436,38 @@ function getBatchFormData() {
       .filter(Boolean)
   )];
   const weekdays = [...document.querySelectorAll(".weekday-picker input:checked")].map((input) => Number(input.value));
-  return { startDate, compartment, fleets, weekdays };
+  return { startDate, endDate, compartment, fleets, weekdays };
 }
 
 function updateBatchPreview() {
   const preview = document.querySelector("#batch-preview");
-  const { startDate, fleets, weekdays } = getBatchFormData();
-  if (!startDate || !fleets.length || !weekdays.length) {
-    preview.textContent = "Informe data, lista de frotas e dias para ver a previa.";
+  const { startDate, endDate, fleets, weekdays } = getBatchFormData();
+  if (!startDate || !endDate || !fleets.length || !weekdays.length) {
+    preview.textContent = "Informe periodo, lista de frotas e dias para ver a previa.";
     return;
   }
 
-  const distribution = distributeFleetsAcrossWeekdays(fleets, startDate, weekdays);
+  if (endDate < startDate) {
+    preview.textContent = "A data final deve ser maior ou igual a data inicial.";
+    return;
+  }
+
+  const availableDates = allowedDatesInRange(startDate, endDate, weekdays);
+  if (!availableDates.length) {
+    preview.textContent = "Nao ha dias selecionados dentro do periodo informado.";
+    return;
+  }
+
+  const distribution = distributeFleetsAcrossWeekdays(fleets, startDate, endDate, weekdays);
   const grouped = distribution.reduce((summary, item) => {
     summary[item.date] = (summary[item.date] || 0) + 1;
     return summary;
   }, {});
 
-  preview.innerHTML = Object.entries(grouped)
+  const warning = fleets.length > availableDates.length ? `<em>${fleets.length} frotas em ${availableDates.length} dia(s); havera mais de uma frota por dia.</em>` : "";
+  preview.innerHTML = `${warning}${Object.entries(grouped)
     .map(([date, count]) => `<span><strong>${formatDate(date)}</strong>${count} frota(s)</span>`)
-    .join("");
+    .join("")}`;
 }
 
 function isActionableResult(item) {
@@ -1109,6 +1134,7 @@ document.querySelector("#schedule-add-form").addEventListener("submit", async (e
 document.querySelector("#open-batch-modal").addEventListener("click", () => {
   const date = document.querySelector("#schedule-date").value || toDateKey(scheduleAnchor);
   document.querySelector("#batch-start-date").value = date;
+  document.querySelector("#batch-end-date").value = toDateKey(addDays(new Date(`${date}T12:00:00`), 6));
   document.querySelector("#batch-compartment").value = document.querySelector("#schedule-compartment").value || "CARTER MOTOR";
   updateBatchPreview();
   document.querySelector("#batch-modal").showModal();
@@ -1127,14 +1153,25 @@ document.querySelector("#batch-modal").addEventListener("click", (event) => {
 document.querySelector("#batch-schedule-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = document.querySelector("#batch-message");
-  const { startDate, compartment, fleets, weekdays } = getBatchFormData();
+  const { startDate, endDate, compartment, fleets, weekdays } = getBatchFormData();
 
-  if (!startDate || !compartment || !fleets.length || !weekdays.length) {
-    message.textContent = "Informe data, servico, frotas e ao menos um dia da semana.";
+  if (!startDate || !endDate || !compartment || !fleets.length || !weekdays.length) {
+    message.textContent = "Informe periodo, servico, frotas e ao menos um dia da semana.";
     return;
   }
 
-  const distribution = distributeFleetsAcrossWeekdays(fleets, startDate, weekdays);
+  if (endDate < startDate) {
+    message.textContent = "A data final deve ser maior ou igual a data inicial.";
+    return;
+  }
+
+  const availableDates = allowedDatesInRange(startDate, endDate, weekdays);
+  if (!availableDates.length) {
+    message.textContent = "Nao ha dias selecionados dentro do periodo informado.";
+    return;
+  }
+
+  const distribution = distributeFleetsAcrossWeekdays(fleets, startDate, endDate, weekdays);
   try {
     for (const entry of distribution) {
       const item = {
@@ -1163,7 +1200,7 @@ document.querySelector("#batch-schedule-form").addEventListener("submit", async 
   renderSchedule();
 });
 
-["#batch-start-date", "#batch-fleets"].forEach((selector) => {
+["#batch-start-date", "#batch-end-date", "#batch-fleets"].forEach((selector) => {
   document.querySelector(selector).addEventListener("input", updateBatchPreview);
 });
 
