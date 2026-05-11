@@ -14,18 +14,21 @@ create table if not exists public.programacao_coletas (
 
 alter table public.programacao_coletas enable row level security;
 
+drop policy if exists "Usuarios logados podem consultar programacao" on public.programacao_coletas;
 create policy "Usuarios logados podem consultar programacao"
 on public.programacao_coletas
 for select
 to authenticated
 using (true);
 
+drop policy if exists "Usuarios logados podem inserir programacao" on public.programacao_coletas;
 create policy "Usuarios logados podem inserir programacao"
 on public.programacao_coletas
 for insert
 to authenticated
 with check (true);
 
+drop policy if exists "Usuarios logados podem atualizar programacao" on public.programacao_coletas;
 create policy "Usuarios logados podem atualizar programacao"
 on public.programacao_coletas
 for update
@@ -33,6 +36,7 @@ to authenticated
 using (true)
 with check (true);
 
+drop policy if exists "Usuarios logados podem excluir programacao" on public.programacao_coletas;
 create policy "Usuarios logados podem excluir programacao"
 on public.programacao_coletas
 for delete
@@ -43,23 +47,30 @@ create table if not exists public.relatorios_chb (
   id text primary key,
   nome_arquivo text,
   linhas jsonb not null default '[]'::jsonb,
+  data_min date,
+  data_max date,
   updated_at timestamp with time zone default now()
 );
 
+alter table public.relatorios_chb add column if not exists data_min date;
+alter table public.relatorios_chb add column if not exists data_max date;
 alter table public.relatorios_chb enable row level security;
 
+drop policy if exists "Usuarios logados podem consultar relatorios chb" on public.relatorios_chb;
 create policy "Usuarios logados podem consultar relatorios chb"
 on public.relatorios_chb
 for select
 to authenticated
 using (true);
 
+drop policy if exists "Usuarios logados podem inserir relatorios chb" on public.relatorios_chb;
 create policy "Usuarios logados podem inserir relatorios chb"
 on public.relatorios_chb
 for insert
 to authenticated
 with check (true);
 
+drop policy if exists "Usuarios logados podem atualizar relatorios chb" on public.relatorios_chb;
 create policy "Usuarios logados podem atualizar relatorios chb"
 on public.relatorios_chb
 for update

@@ -925,11 +925,24 @@ function applyDateFilter() {
   });
 }
 
-function setDefaultDateRange() {
-  const dates = analyses.map((item) => item.data_coleta).filter(Boolean).sort();
-  if (!dates.length) return;
-  document.querySelector("#date-min").value = dates[0];
-  document.querySelector("#date-max").value = dates[dates.length - 1];
+function getAnalysisDateRange(rows = analyses) {
+  const dates = rows.map((item) => item.data_coleta).filter(Boolean).sort();
+  if (!dates.length) return { min: "", max: "" };
+  return { min: dates[0], max: dates[dates.length - 1] };
+}
+
+function setDefaultDateRange(range = getAnalysisDateRange()) {
+  if (!range.min || !range.max) return;
+  document.querySelector("#date-min").value = range.min;
+  document.querySelector("#date-max").value = range.max;
+}
+
+function setReportDateRangeFromRows(rows = analyses) {
+  const dates = rows.map((item) => item.data_coleta).filter(Boolean).sort();
+  if (!dates.length) return { min: "", max: "" };
+  const range = { min: dates[0], max: dates[dates.length - 1] };
+  setDefaultDateRange(range);
+  return range;
 }
 
 async function loadAnalysisCsv() {
@@ -939,7 +952,7 @@ async function loadAnalysisCsv() {
     try {
       const { data, error } = await supabaseClient
         .from("relatorios_chb")
-        .select("id, nome_arquivo, linhas, updated_at")
+        .select("id, nome_arquivo, linhas, data_min, data_max, updated_at")
         .eq("id", currentReportId)
         .maybeSingle();
 
@@ -949,7 +962,7 @@ async function loadAnalysisCsv() {
         activeReportKey = `supabase-${data.updated_at || data.id}`;
         reportResultDetails = {};
         analyses = data.linhas.map(normalizeAnalysisRecord);
-        setDefaultDateRange();
+        setDefaultDateRange(data.data_min && data.data_max ? { min: data.data_min, max: data.data_max } : getAnalysisDateRange());
         document.querySelector("#report-file-name").textContent = data.nome_arquivo || "Ultimo relatorio";
         status.textContent = `Ultimo relatorio compartilhado: ${data.nome_arquivo || "relatorio CHB"}`;
         updateDashboardFromAnalyses();
@@ -967,7 +980,7 @@ async function loadAnalysisCsv() {
     activeReportKey = "default";
     reportResultDetails = {};
     analyses = parseCsv(text).map(normalizeAnalysisRecord);
-    setDefaultDateRange();
+    setReportDateRangeFromRows();
     status.textContent = `Relatorio CHB carregado: ${analysisCsvPath}`;
   } catch (error) {
     analyses = [];
@@ -990,11 +1003,14 @@ function compactAnalysisRows(rows) {
 
 async function saveCurrentReport(file, rows) {
   if (!supabaseClient) return false;
+  const range = getAnalysisDateRange(rows);
 
   const { error } = await supabaseClient.from("relatorios_chb").upsert({
     id: currentReportId,
     nome_arquivo: file.name,
     linhas: compactAnalysisRows(rows),
+    data_min: range.min || null,
+    data_max: range.max || null,
     updated_at: new Date().toISOString(),
   });
 
@@ -1059,7 +1075,7 @@ async function handleAnalysisUpload(event) {
     }
 
     await saveCurrentReport(file, analyses);
-    setDefaultDateRange();
+    setReportDateRangeFromRows();
     fileName.textContent = file.name;
     status.textContent = `Relatorio compartilhado atualizado: ${file.name}`;
     updateDashboardFromAnalyses();
