@@ -38,3 +38,31 @@ on public.programacao_coletas
 for delete
 to authenticated
 using (true);
+
+create table if not exists public.relatorios_chb (
+  id text primary key,
+  nome_arquivo text,
+  linhas jsonb not null default '[]'::jsonb,
+  updated_at timestamp with time zone default now()
+);
+
+alter table public.relatorios_chb enable row level security;
+
+create policy "Usuarios logados podem consultar relatorios chb"
+on public.relatorios_chb
+for select
+to authenticated
+using (true);
+
+create policy "Usuarios logados podem inserir relatorios chb"
+on public.relatorios_chb
+for insert
+to authenticated
+with check (true);
+
+create policy "Usuarios logados podem atualizar relatorios chb"
+on public.relatorios_chb
+for update
+to authenticated
+using (true)
+with check (true);

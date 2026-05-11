@@ -15,6 +15,7 @@ const userRoles = {
 };
 const fleetCsvPath = "database/base_frotas.csv";
 const analysisCsvPath = "database/analises_chb.csv";
+const currentReportId = "chb-atual";
 let collectionsByDay = [];
 let riskByComponent = [];
 let priorities = [];
@@ -933,6 +934,32 @@ function setDefaultDateRange() {
 
 async function loadAnalysisCsv() {
   const status = document.querySelector("#metric-report-status");
+
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient
+        .from("relatorios_chb")
+        .select("id, nome_arquivo, linhas, updated_at")
+        .eq("id", currentReportId)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data?.linhas?.length) {
+        activeReportKey = `supabase-${data.updated_at || data.id}`;
+        reportResultDetails = {};
+        analyses = data.linhas.map(normalizeAnalysisRecord);
+        setDefaultDateRange();
+        document.querySelector("#report-file-name").textContent = data.nome_arquivo || "Ultimo relatorio";
+        status.textContent = `Ultimo relatorio compartilhado: ${data.nome_arquivo || "relatorio CHB"}`;
+        updateDashboardFromAnalyses();
+        return;
+      }
+    } catch (error) {
+      console.warn("Relatorio CHB compartilhado indisponivel", error);
+    }
+  }
+
   try {
     const response = await fetch(analysisCsvPath);
     if (!response.ok) throw new Error("Relatorio nao encontrado");
@@ -948,6 +975,31 @@ async function loadAnalysisCsv() {
   }
 
   updateDashboardFromAnalyses();
+}
+
+function compactAnalysisRows(rows) {
+  return rows.map((row) => ({
+    cod_frota: row.cod_frota || "",
+    cod_compartimento: row.cod_compartimento || "",
+    compartimento: row.compartimento || "",
+    data_coleta: row.data_coleta || "",
+    resultado: row.resultado || "SEM RESULTADO",
+    classificacao: row.classificacao || classifyAnalysis(row.resultado),
+  }));
+}
+
+async function saveCurrentReport(file, rows) {
+  if (!supabaseClient) return false;
+
+  const { error } = await supabaseClient.from("relatorios_chb").upsert({
+    id: currentReportId,
+    nome_arquivo: file.name,
+    linhas: compactAnalysisRows(rows),
+    updated_at: new Date().toISOString(),
+  });
+
+  if (error) throw error;
+  return true;
 }
 
 function normalizeExcelDate(value) {
@@ -1006,12 +1058,14 @@ async function handleAnalysisUpload(event) {
       analyses = recordsFromWorkbook(workbook);
     }
 
+    await saveCurrentReport(file, analyses);
     setDefaultDateRange();
     fileName.textContent = file.name;
-    status.textContent = `Relatorio carregado pelo usuario: ${file.name}`;
+    status.textContent = `Relatorio compartilhado atualizado: ${file.name}`;
     updateDashboardFromAnalyses();
   } catch (error) {
-    status.textContent = "Nao foi possivel ler o relatorio enviado.";
+    console.warn("Falha ao atualizar relatorio CHB", error);
+    status.textContent = "Nao foi possivel ler ou salvar o relatorio enviado.";
   }
 }
 
