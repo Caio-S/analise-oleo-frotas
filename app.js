@@ -505,7 +505,7 @@ function getUnifiedResults() {
     origin: "Programacao",
   }));
 
-  const report = analyses.filter(isReportAnomaly).map((item, index) => {
+  const report = filteredAnalyses.filter(isReportAnomaly).map((item, index) => {
     const id = reportResultId(item, index);
     const detail = reportResultDetails[id] || {};
     return {
