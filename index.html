@@ -70,11 +70,13 @@
             <span>Analises em atencao</span>
             <strong id="metric-attention">0</strong>
             <small id="metric-attention-rate">0% da amostragem</small>
+            <button class="metric-action" type="button" data-open-results="Anomalia">Ver anomalias</button>
           </article>
           <article class="metric danger">
             <span>Criticas abertas</span>
             <strong id="metric-critical">0</strong>
             <small id="metric-critical-rate">0% da amostragem</small>
+            <button class="metric-action" type="button" data-open-results="Critico">Ver criticas</button>
           </article>
         </div>
 
@@ -97,6 +99,11 @@
               <input id="date-max" type="date" />
             </label>
             <button class="secondary-button" id="clear-date-filter" type="button">Limpar filtro</button>
+          </div>
+          <div class="report-meta">
+            <span id="report-period">Periodo do relatorio: --</span>
+            <span id="report-uploaded-at">Ultima atualizacao: --</span>
+            <span id="report-uploaded-by">Responsavel: --</span>
           </div>
         </section>
 
@@ -237,6 +244,36 @@
             <button class="primary-button" type="submit">Agendar</button>
             <button class="secondary-button" id="open-batch-modal" type="button">Programar lote</button>
           </form>
+        </section>
+
+        <section class="schedule-summary-grid" aria-label="Resumo da programacao">
+          <article class="schedule-summary-card">
+            <span>Total programado</span>
+            <strong id="schedule-summary-total">0</strong>
+          </article>
+          <article class="schedule-summary-card done">
+            <span>Realizadas</span>
+            <strong id="schedule-summary-done">0</strong>
+          </article>
+          <article class="schedule-summary-card pending">
+            <span>Pendentes</span>
+            <strong id="schedule-summary-pending">0</strong>
+          </article>
+          <article class="schedule-summary-card warning">
+            <span>Anomalias</span>
+            <strong id="schedule-summary-anomaly">0</strong>
+          </article>
+          <article class="schedule-summary-card danger">
+            <span>Criticas</span>
+            <strong id="schedule-summary-critical">0</strong>
+          </article>
+        </section>
+
+        <section class="panel schedule-search-panel">
+          <label>
+            Buscar frota na programacao
+            <input id="schedule-search" type="search" placeholder="Digite o codigo da frota ou compartimento" />
+          </label>
         </section>
 
         <div class="schedule-grid" id="schedule-grid"></div>

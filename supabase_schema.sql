@@ -49,11 +49,13 @@ create table if not exists public.relatorios_chb (
   linhas jsonb not null default '[]'::jsonb,
   data_min date,
   data_max date,
+  uploaded_by text,
   updated_at timestamp with time zone default now()
 );
 
 alter table public.relatorios_chb add column if not exists data_min date;
 alter table public.relatorios_chb add column if not exists data_max date;
+alter table public.relatorios_chb add column if not exists uploaded_by text;
 alter table public.relatorios_chb enable row level security;
 
 drop policy if exists "Usuarios logados podem consultar relatorios chb" on public.relatorios_chb;

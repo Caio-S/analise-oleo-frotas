@@ -31,6 +31,7 @@ let selectedServiceId = null;
 let scheduleDbEnabled = false;
 let currentUserRole = "coletor";
 let batchEndDateTouched = false;
+let scheduleSearchTerm = "";
 const scheduleItems = [
   { id: 1, date: "2026-05-04", fleet: "60102", compartment: "CARTER MOTOR", done: true },
   { id: 2, date: "2026-05-04", fleet: "62279", compartment: "CARTER MOTOR", done: false },
@@ -331,6 +332,12 @@ function getVisibleScheduleItems() {
     });
 }
 
+function filterScheduleItems(items) {
+  const term = scheduleSearchTerm.trim().toLowerCase();
+  if (!term) return items;
+  return items.filter((item) => `${item.fleet} ${item.compartment}`.toLowerCase().includes(term));
+}
+
 function buildSchedulePrintHtml() {
   const { start, end } = getVisibleScheduleRange();
   const period = `${formatDate(start)} a ${formatDate(end)}`;
@@ -429,7 +436,7 @@ function renderScheduleItem(item) {
   const status = item.done ? "REALIZADA" : "PENDENTE";
   const resultLabel = item.result ? `<em>${item.result}</em>` : "";
   return `
-    <button class="service-card ${item.done ? "done" : ""}" type="button" data-service-id="${item.id}">
+    <button class="service-card ${serviceCardClass(item)}" type="button" data-service-id="${item.id}">
       <div class="service-card-top">
         <strong>${item.fleet}</strong>
         <span>${status}</span>
@@ -439,6 +446,26 @@ function renderScheduleItem(item) {
       ${resultLabel}
     </button>
   `;
+}
+
+function serviceCardClass(item) {
+  if (item.result === "Critico") return "critical";
+  if (item.result === "Anomalia") return "anomaly";
+  if (item.done) return "done";
+  return "pending";
+}
+
+function renderScheduleSummary() {
+  const items = filterScheduleItems(getVisibleScheduleItems());
+  const done = items.filter((item) => item.done).length;
+  const anomaly = items.filter((item) => item.result === "Anomalia").length;
+  const critical = items.filter((item) => item.result === "Critico").length;
+
+  document.querySelector("#schedule-summary-total").textContent = items.length.toLocaleString("pt-BR");
+  document.querySelector("#schedule-summary-done").textContent = done.toLocaleString("pt-BR");
+  document.querySelector("#schedule-summary-pending").textContent = (items.length - done).toLocaleString("pt-BR");
+  document.querySelector("#schedule-summary-anomaly").textContent = anomaly.toLocaleString("pt-BR");
+  document.querySelector("#schedule-summary-critical").textContent = critical.toLocaleString("pt-BR");
 }
 
 function progressClass(percent, total) {
@@ -459,7 +486,7 @@ function renderWeekSchedule() {
   grid.innerHTML = days
     .map((date) => {
       const key = toDateKey(date);
-      const items = scheduleItems.filter((item) => item.date === key);
+      const items = filterScheduleItems(scheduleItems.filter((item) => item.date === key));
       const done = items.filter((item) => item.done).length;
       const percent = items.length ? Math.round((done / items.length) * 100) : 0;
       return `
@@ -493,7 +520,7 @@ function renderMonthSchedule() {
   grid.innerHTML = days
     .map((date) => {
       const key = toDateKey(date);
-      const items = scheduleItems.filter((item) => item.date === key);
+      const items = filterScheduleItems(scheduleItems.filter((item) => item.date === key));
       const done = items.filter((item) => item.done).length;
       const percent = items.length ? Math.round((done / items.length) * 100) : 0;
       const outside = date.getMonth() !== scheduleAnchor.getMonth();
@@ -519,6 +546,7 @@ function renderMonthSchedule() {
 }
 
 function renderSchedule() {
+  renderScheduleSummary();
   if (scheduleView === "week") {
     renderWeekSchedule();
   } else {
@@ -532,7 +560,7 @@ function openScheduleModal(dateKey) {
   const title = document.querySelector("#schedule-modal-title");
   const subtitle = document.querySelector("#schedule-modal-subtitle");
   const list = document.querySelector("#modal-task-list");
-  const items = scheduleItems.filter((item) => item.date === dateKey);
+  const items = filterScheduleItems(scheduleItems.filter((item) => item.date === dateKey));
   const done = items.filter((item) => item.done).length;
 
   title.textContent = `Servicos de ${formatDate(dateKey)}`;
@@ -860,6 +888,21 @@ function renderDashboardMetrics() {
   document.querySelector("#metric-critical-rate").textContent = `${Math.round((critical / total || 0) * 100)}% da amostragem`;
 }
 
+function currentUserLabel() {
+  const sessionText = document.querySelector("#session-status")?.textContent || "";
+  return sessionText.split(" - ")[0] || "";
+}
+
+function renderReportMeta({ range = getAnalysisDateRange(), uploadedAt = "", uploadedBy = "", total = analyses.length } = {}) {
+  const period = range.min && range.max ? `${formatDate(range.min)} a ${formatDate(range.max)}` : "--";
+  const updated = uploadedAt ? new Date(uploadedAt).toLocaleString("pt-BR") : "--";
+  document.querySelector("#report-period").textContent = `Periodo do relatorio: ${period}`;
+  document.querySelector("#report-uploaded-at").textContent = `Ultima atualizacao: ${updated}`;
+  document.querySelector("#report-uploaded-by").textContent = `Responsavel: ${uploadedBy || "--"}`;
+  document.querySelector("#metric-report-status").textContent =
+    total > 0 ? `Relatorio atual: ${total.toLocaleString("pt-BR")} analises entre ${period}` : "Nenhum relatorio CHB carregado";
+}
+
 function updateDashboardFromAnalyses() {
   applyDateFilter();
 
@@ -954,6 +997,8 @@ function clearReportState(message, fileName = "Aguardando upload") {
   document.querySelector("#date-max").value = "";
   document.querySelector("#report-file-name").textContent = fileName;
   document.querySelector("#metric-report-status").textContent = message;
+  renderReportMeta({ range: { min: "", max: "" }, uploadedAt: "", uploadedBy: "", total: 0 });
+  document.querySelector("#metric-report-status").textContent = message;
   updateDashboardFromAnalyses();
 }
 
@@ -964,7 +1009,7 @@ async function loadAnalysisCsv() {
     try {
       const { data, error } = await supabaseClient
         .from("relatorios_chb")
-        .select("id, nome_arquivo, linhas, data_min, data_max, updated_at")
+        .select("id, nome_arquivo, linhas, data_min, data_max, uploaded_by, updated_at")
         .eq("id", currentReportId)
         .maybeSingle();
 
@@ -976,7 +1021,12 @@ async function loadAnalysisCsv() {
         analyses = data.linhas.map(normalizeAnalysisRecord);
         setDefaultDateRange(data.data_min && data.data_max ? { min: data.data_min, max: data.data_max } : getAnalysisDateRange());
         document.querySelector("#report-file-name").textContent = data.nome_arquivo || "Ultimo relatorio";
-        status.textContent = `Ultimo relatorio compartilhado: ${data.nome_arquivo || "relatorio CHB"}`;
+        renderReportMeta({
+          range: data.data_min && data.data_max ? { min: data.data_min, max: data.data_max } : getAnalysisDateRange(),
+          uploadedAt: data.updated_at,
+          uploadedBy: data.uploaded_by,
+          total: analyses.length,
+        });
         updateDashboardFromAnalyses();
         return;
       }
@@ -998,7 +1048,8 @@ async function loadAnalysisCsv() {
     reportResultDetails = {};
     analyses = parseCsv(text).map(normalizeAnalysisRecord);
     setReportDateRangeFromRows();
-    status.textContent = `Relatorio CHB carregado: ${analysisCsvPath}`;
+    document.querySelector("#report-file-name").textContent = "Base padrao";
+    renderReportMeta({ uploadedBy: "Base local", total: analyses.length });
   } catch (error) {
     analyses = [];
     status.textContent = "Relatorio CHB nao carregado. Abra por servidor local ou GitHub Pages.";
@@ -1021,6 +1072,7 @@ function compactAnalysisRows(rows) {
 async function saveCurrentReport(file, rows) {
   if (!supabaseClient) return false;
   const range = getAnalysisDateRange(rows);
+  const uploadedAt = new Date().toISOString();
 
   const { error } = await supabaseClient.from("relatorios_chb").upsert({
     id: currentReportId,
@@ -1028,11 +1080,12 @@ async function saveCurrentReport(file, rows) {
     linhas: compactAnalysisRows(rows),
     data_min: range.min || null,
     data_max: range.max || null,
-    updated_at: new Date().toISOString(),
+    uploaded_by: currentUserLabel(),
+    updated_at: uploadedAt,
   });
 
   if (error) throw error;
-  return true;
+  return { range, uploadedAt, uploadedBy: currentUserLabel() };
 }
 
 function normalizeExcelDate(value) {
@@ -1091,10 +1144,16 @@ async function handleAnalysisUpload(event) {
       analyses = recordsFromWorkbook(workbook);
     }
 
-    await saveCurrentReport(file, analyses);
+    const reportInfo = await saveCurrentReport(file, analyses);
     setReportDateRangeFromRows();
     fileName.textContent = file.name;
-    status.textContent = `Relatorio compartilhado atualizado: ${file.name}`;
+    renderReportMeta({
+      range: reportInfo?.range || getAnalysisDateRange(),
+      uploadedAt: reportInfo?.uploadedAt || new Date().toISOString(),
+      uploadedBy: reportInfo?.uploadedBy || currentUserLabel(),
+      total: analyses.length,
+    });
+    status.textContent = `Relatorio salvo: ${analyses.length.toLocaleString("pt-BR")} analises entre ${formatDate(getAnalysisDateRange().min)} e ${formatDate(getAnalysisDateRange().max)}`;
     updateDashboardFromAnalyses();
   } catch (error) {
     console.warn("Falha ao atualizar relatorio CHB", error);
@@ -1278,14 +1337,23 @@ document.querySelector("#logout-button").addEventListener("click", async () => {
   await refreshSession();
 });
 
+function activateView(view) {
+  document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
+  document.querySelectorAll(".view").forEach((section) => section.classList.remove("active"));
+  document.querySelector(`#${view}`).classList.add("active");
+  document.querySelector("#page-title").textContent = pageTitles[view];
+}
+
 document.querySelectorAll(".nav-item").forEach((button) => {
+  button.addEventListener("click", () => activateView(button.dataset.view));
+});
+
+document.querySelectorAll("[data-open-results]").forEach((button) => {
   button.addEventListener("click", () => {
-    const view = button.dataset.view;
-    document.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
-    document.querySelectorAll(".view").forEach((section) => section.classList.remove("active"));
-    button.classList.add("active");
-    document.querySelector(`#${view}`).classList.add("active");
-    document.querySelector("#page-title").textContent = pageTitles[view];
+    activateView("results");
+    document.querySelector("#result-filter-origin").value = "Relatorio CHB";
+    document.querySelector("#result-filter-classification").value = button.dataset.openResults;
+    renderResultsQueue();
   });
 });
 
@@ -1299,6 +1367,10 @@ document.querySelector("#fleet-search").addEventListener("input", (event) => {
 document.querySelector("#fleet-form").addEventListener("submit", handleFleetSubmit);
 
 document.querySelector("#analysis-upload").addEventListener("change", handleAnalysisUpload);
+document.querySelector("#schedule-search").addEventListener("input", (event) => {
+  scheduleSearchTerm = event.target.value;
+  renderSchedule();
+});
 document.querySelector("#date-min").addEventListener("change", updateDashboardFromAnalyses);
 document.querySelector("#date-max").addEventListener("change", updateDashboardFromAnalyses);
 document.querySelector("#clear-date-filter").addEventListener("click", () => {
