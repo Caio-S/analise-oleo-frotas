@@ -362,7 +362,7 @@ function buildSchedulePrintHtml() {
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Programacao Troca de Oleo</title>
+  <title>Programacao de Coleta de Oleo</title>
   <style>
     body { font-family: Calibri, Arial, sans-serif; font-size: 11px; color: #333; margin: 0; padding: 20px; background-color: #f4f6f9; }
     .no-print { display: flex; justify-content: space-between; align-items: center; background-color: #fff; padding: 15px 20px; border-radius: 8px; margin-bottom: 25px; border: 1px solid #dee2e6; box-shadow: 0 4px 6px rgba(0,0,0,0.05); max-width: 794px; margin-left: auto; margin-right: auto; }
@@ -394,7 +394,7 @@ function buildSchedulePrintHtml() {
   </div>
   <div class="folha-a4">
     <div class="header">
-      <h2>Programacao Troca de Oleo</h2>
+      <h2>Programacao de Coleta de Oleo</h2>
       <p>CRV INDUSTRIAL | Periodo: ${escapeHtml(period)}</p>
       <p>Gerado em: ${escapeHtml(generatedAt)}</p>
     </div>
