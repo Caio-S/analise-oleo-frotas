@@ -424,6 +424,194 @@ function buildSchedulePrintHtml() {
 </html>`;
 }
 
+function dashboardMetricSnapshot() {
+  const total = filteredAnalyses.length;
+  const critical = filteredAnalyses.filter((item) => item.classificacao === "Critico").length;
+  const attention = filteredAnalyses.filter((item) => item.classificacao === "Atencao").length;
+  const uniqueDates = new Set(filteredAnalyses.map((item) => item.data_coleta).filter(Boolean));
+  const average = uniqueDates.size ? total / uniqueDates.size : 0;
+
+  return {
+    total,
+    average,
+    attention,
+    critical,
+    attentionRate: Math.round((attention / total || 0) * 100),
+    criticalRate: Math.round((critical / total || 0) * 100),
+  };
+}
+
+function dashboardPeriodLabel() {
+  const min = document.querySelector("#date-min").value;
+  const max = document.querySelector("#date-max").value;
+  if (min && max) return `${formatDate(min)} a ${formatDate(max)}`;
+  if (min) return `A partir de ${formatDate(min)}`;
+  if (max) return `Ate ${formatDate(max)}`;
+  return "Periodo completo";
+}
+
+function buildDashboardPrintHtml() {
+  updateDashboardFromAnalyses();
+  const metrics = dashboardMetricSnapshot();
+  const period = dashboardPeriodLabel();
+  const generatedAt = new Date().toLocaleString("pt-BR");
+  const reportName = document.querySelector("#report-file-name").textContent || "Relatorio CHB";
+  const uploadedAt = document.querySelector("#report-uploaded-at").textContent.replace("Ultima atualizacao: ", "") || "--";
+  const uploadedBy = document.querySelector("#report-uploaded-by").textContent.replace("Responsavel: ", "") || "--";
+  const maxCollections = Math.max(...collectionsByDay.map((item) => item.count), 1);
+
+  const collectionBars = collectionsByDay.length
+    ? collectionsByDay
+        .map((item) => {
+          const height = Math.max(18, Math.round((item.count / maxCollections) * 180));
+          return `
+            <div class="print-bar-wrap">
+              <div class="print-bar" style="height:${height}px"><span>${item.count}</span></div>
+              <small>${escapeHtml(item.date.slice(0, 5))}</small>
+            </div>
+          `;
+        })
+        .join("")
+    : `<div class="empty">Sem dados de coleta para o periodo.</div>`;
+
+  const riskRows = riskByComponent.length
+    ? riskByComponent
+        .map(
+          (item) => `
+            <div class="print-track-row">
+              <div><strong>${escapeHtml(item.name)}</strong><span>${item.count}</span></div>
+              <div class="print-track"><div style="width:${item.value}%"></div></div>
+            </div>
+          `
+        )
+        .join("")
+    : `<div class="empty">Sem analises criticas no periodo.</div>`;
+
+  const resultRows = resultDistribution.length
+    ? resultDistribution
+        .map(
+          (item) => `
+            <div class="print-track-row">
+              <div><strong>${escapeHtml(item.name)}</strong><span>${item.count}</span></div>
+              <div class="print-track"><div class="${escapeHtml(item.className)}" style="width:${item.value}%"></div></div>
+            </div>
+          `
+        )
+        .join("")
+    : `<div class="empty">Sem resultados no periodo.</div>`;
+
+  const priorityRows = priorities.length
+    ? priorities
+        .map(
+          (row) => `
+            <tr>
+              <td><strong>${escapeHtml(row.cod_frota)}</strong></td>
+              <td>${escapeHtml(row.compartimento)}</td>
+              <td>${escapeHtml(row.resultado)}</td>
+              <td>${formatDate(row.data_coleta)}</td>
+              <td>${escapeHtml(row.classificacao)}</td>
+            </tr>
+          `
+        )
+        .join("")
+    : `<tr><td colspan="5">Sem analises criticas no periodo.</td></tr>`;
+
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard de Analise de Oleo</title>
+  <style>
+    body { margin: 0; padding: 18px; background: #eef2f6; color: #111827; font-family: Arial, Calibri, sans-serif; }
+    .no-print { max-width: 1120px; margin: 0 auto 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; background: #fff; border: 1px solid #d9e1ea; border-radius: 8px; padding: 14px 18px; box-shadow: 0 4px 12px rgba(15,23,42,0.08); }
+    .btn-print { border: 0; border-radius: 6px; padding: 10px 16px; background: #0d6efd; color: #fff; font-weight: 800; cursor: pointer; }
+    .sheet { max-width: 1120px; margin: 0 auto; background: #fff; border-radius: 8px; padding: 22px; box-shadow: 0 0 12px rgba(15,23,42,0.12); }
+    .header { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; border-bottom: 2px solid #111827; padding-bottom: 12px; margin-bottom: 14px; }
+    .header h1 { margin: 0 0 6px; font-size: 22px; text-transform: uppercase; }
+    .header p { margin: 2px 0; font-size: 12px; color: #475467; }
+    .meta { text-align: right; }
+    .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+    .metric { border: 1px solid #d9e1ea; border-left: 5px solid #1976d2; border-radius: 8px; padding: 12px; }
+    .metric.warning { border-left-color: #d97706; }
+    .metric.danger { border-left-color: #dc2626; }
+    .metric span { display: block; color: #475467; font-size: 12px; }
+    .metric strong { display: block; font-size: 28px; margin: 5px 0; }
+    .grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 12px; }
+    .panel { border: 1px solid #d9e1ea; border-radius: 8px; padding: 12px; break-inside: avoid; }
+    .panel h2 { margin: 0 0 10px; font-size: 15px; }
+    .bars { height: 230px; display: flex; gap: 8px; align-items: flex-end; border-bottom: 1px solid #cbd5e1; padding: 0 8px 6px; }
+    .print-bar-wrap { flex: 1; min-width: 24px; display: grid; justify-items: center; gap: 4px; }
+    .print-bar { width: 100%; max-width: 42px; background: #1976d2; border-radius: 5px 5px 0 0; display: flex; align-items: flex-start; justify-content: center; color: #fff; font-size: 10px; font-weight: 800; padding-top: 4px; box-sizing: border-box; }
+    .print-bar-wrap small { font-size: 9px; color: #475467; writing-mode: vertical-rl; transform: rotate(180deg); height: 42px; }
+    .print-track-row { display: grid; gap: 5px; margin-bottom: 10px; }
+    .print-track-row div:first-child { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; }
+    .print-track { height: 10px; background: #eef2f6; border-radius: 999px; overflow: hidden; }
+    .print-track div { height: 100%; background: #dc2626; border-radius: inherit; }
+    .print-track div.atencao { background: #d97706; }
+    .print-track div.normal { background: #16a34a; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th, td { border: 1px solid #d9e1ea; padding: 6px; text-align: left; vertical-align: top; }
+    th { background: #f1f5f9; text-transform: uppercase; font-size: 10px; }
+    .wide { grid-column: 1 / -1; }
+    .empty { color: #667085; font-size: 12px; padding: 10px; border: 1px dashed #cbd5e1; border-radius: 6px; }
+    @media print {
+      body { padding: 0; background: #fff; }
+      .no-print { display: none !important; }
+      .sheet { box-shadow: none; border-radius: 0; max-width: 100%; padding: 0; }
+      @page { size: A4 landscape; margin: 1cm; }
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <p style="margin:0"><strong>Dashboard pronto para compartilhar.</strong><br><span style="font-size:12px;color:#475467">Use o botao para imprimir ou salvar em PDF. Formato sugerido: A4 paisagem.</span></p>
+    <button class="btn-print" onclick="window.print()">Imprimir PDF</button>
+  </div>
+  <main class="sheet">
+    <header class="header">
+      <div>
+        <h1>Dashboard de Analise de Oleo</h1>
+        <p>CRV INDUSTRIAL | Periodo: ${escapeHtml(period)}</p>
+        <p>Relatorio base: ${escapeHtml(reportName)}</p>
+      </div>
+      <div class="meta">
+        <p>Gerado em: ${escapeHtml(generatedAt)}</p>
+        <p>Atualizacao CHB: ${escapeHtml(uploadedAt)}</p>
+        <p>Responsavel: ${escapeHtml(uploadedBy)}</p>
+      </div>
+    </header>
+    <section class="metric-grid">
+      <article class="metric"><span>Analises no periodo</span><strong>${metrics.total.toLocaleString("pt-BR")}</strong><span>Relatorio CHB filtrado</span></article>
+      <article class="metric"><span>Media por dia</span><strong>${metrics.average.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</strong><span>Com base nas datas de coleta</span></article>
+      <article class="metric warning"><span>Analises em atencao</span><strong>${metrics.attention.toLocaleString("pt-BR")}</strong><span>${metrics.attentionRate}% da amostragem</span></article>
+      <article class="metric danger"><span>Criticas abertas</span><strong>${metrics.critical.toLocaleString("pt-BR")}</strong><span>${metrics.criticalRate}% da amostragem</span></article>
+    </section>
+    <section class="grid">
+      <article class="panel wide"><h2>Coletas por dia</h2><div class="bars">${collectionBars}</div></article>
+      <article class="panel"><h2>Incidencia critica por compartimento</h2>${riskRows}</article>
+      <article class="panel"><h2>Distribuicao dos resultados</h2>${resultRows}</article>
+      <article class="panel wide">
+        <h2>Prioridades da manutencao</h2>
+        <table>
+          <thead><tr><th>Frota</th><th>Componente</th><th>Ocorrencia</th><th>Coleta</th><th>Status</th></tr></thead>
+          <tbody>${priorityRows}</tbody>
+        </table>
+      </article>
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
+function openDashboardPrintReport() {
+  const reportWindow = window.open("", "_blank");
+  if (!reportWindow) return;
+  reportWindow.document.open();
+  reportWindow.document.write(buildDashboardPrintHtml());
+  reportWindow.document.close();
+}
+
 function openSchedulePrintReport() {
   const reportWindow = window.open("", "_blank");
   if (!reportWindow) return;
@@ -1397,6 +1585,7 @@ document.querySelector("#fleet-search").addEventListener("input", (event) => {
 document.querySelector("#fleet-form").addEventListener("submit", handleFleetSubmit);
 
 document.querySelector("#analysis-upload").addEventListener("change", handleAnalysisUpload);
+document.querySelector("#print-dashboard").addEventListener("click", openDashboardPrintReport);
 document.querySelector("#schedule-search").addEventListener("input", (event) => {
   scheduleSearchTerm = event.target.value;
   renderSchedule();
