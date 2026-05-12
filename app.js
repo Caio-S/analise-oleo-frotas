@@ -523,20 +523,20 @@ function buildDashboardPrintHtml() {
   <title>Dashboard de Analise de Oleo</title>
   <style>
     body { margin: 0; padding: 18px; background: #eef2f6; color: #111827; font-family: Arial, Calibri, sans-serif; }
-    .no-print { max-width: 1120px; margin: 0 auto 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; background: #fff; border: 1px solid #d9e1ea; border-radius: 8px; padding: 14px 18px; box-shadow: 0 4px 12px rgba(15,23,42,0.08); }
+    .no-print { max-width: 794px; margin: 0 auto 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; background: #fff; border: 1px solid #d9e1ea; border-radius: 8px; padding: 14px 18px; box-shadow: 0 4px 12px rgba(15,23,42,0.08); }
     .btn-print { border: 0; border-radius: 6px; padding: 10px 16px; background: #0d6efd; color: #fff; font-weight: 800; cursor: pointer; }
-    .sheet { max-width: 1120px; margin: 0 auto; background: #fff; border-radius: 8px; padding: 22px; box-shadow: 0 0 12px rgba(15,23,42,0.12); }
+    .sheet { max-width: 794px; min-height: 1123px; margin: 0 auto; background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 0 12px rgba(15,23,42,0.12); }
     .header { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; border-bottom: 2px solid #111827; padding-bottom: 12px; margin-bottom: 14px; }
     .header h1 { margin: 0 0 6px; font-size: 22px; text-transform: uppercase; }
     .header p { margin: 2px 0; font-size: 12px; color: #475467; }
     .meta { text-align: right; }
-    .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+    .metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 14px; }
     .metric { border: 1px solid #d9e1ea; border-left: 5px solid #1976d2; border-radius: 8px; padding: 12px; }
     .metric.warning { border-left-color: #d97706; }
     .metric.danger { border-left-color: #dc2626; }
     .metric span { display: block; color: #475467; font-size: 12px; }
     .metric strong { display: block; font-size: 28px; margin: 5px 0; }
-    .grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 12px; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
     .panel { border: 1px solid #d9e1ea; border-radius: 8px; padding: 12px; break-inside: avoid; }
     .panel h2 { margin: 0 0 10px; font-size: 15px; }
     .bars { height: 230px; display: flex; gap: 8px; align-items: flex-end; border-bottom: 1px solid #cbd5e1; padding: 0 8px 6px; }
@@ -557,15 +557,15 @@ function buildDashboardPrintHtml() {
     @media print {
       body { padding: 0; background: #fff; }
       .no-print { display: none !important; }
-      .sheet { box-shadow: none; border-radius: 0; max-width: 100%; padding: 0; }
-      @page { size: A4 landscape; margin: 1cm; }
+      .sheet { box-shadow: none; border-radius: 0; max-width: 100%; min-height: auto; padding: 0; }
+      @page { size: A4 portrait; margin: 1cm; }
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
   </style>
 </head>
 <body>
   <div class="no-print">
-    <p style="margin:0"><strong>Dashboard pronto para compartilhar.</strong><br><span style="font-size:12px;color:#475467">Use o botao para imprimir ou salvar em PDF. Formato sugerido: A4 paisagem.</span></p>
+    <p style="margin:0"><strong>Dashboard pronto para compartilhar.</strong><br><span style="font-size:12px;color:#475467">Use o botao para imprimir ou salvar em PDF. Formato sugerido: A4 retrato.</span></p>
     <button class="btn-print" onclick="window.print()">Imprimir PDF</button>
   </div>
   <main class="sheet">
