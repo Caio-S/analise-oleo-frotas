@@ -1148,7 +1148,7 @@ function recordsFromWorkbook(workbook) {
         cod_frota: String(row[1] || "").trim(),
         cod_compartimento: String(row[5] || "").trim(),
         compartimento: String(row[6] || "").trim(),
-        data_coleta: normalizeExcelDate(row[13]),
+        data_coleta: normalizeExcelDate(row[12]),
         resultado: String(row[73] || "SEM RESULTADO").trim(),
       })
     );
