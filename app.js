@@ -945,6 +945,18 @@ function setReportDateRangeFromRows(rows = analyses) {
   return range;
 }
 
+function clearReportState(message, fileName = "Aguardando upload") {
+  activeReportKey = "empty";
+  reportResultDetails = {};
+  analyses = [];
+  filteredAnalyses = [];
+  document.querySelector("#date-min").value = "";
+  document.querySelector("#date-max").value = "";
+  document.querySelector("#report-file-name").textContent = fileName;
+  document.querySelector("#metric-report-status").textContent = message;
+  updateDashboardFromAnalyses();
+}
+
 async function loadAnalysisCsv() {
   const status = document.querySelector("#metric-report-status");
 
@@ -968,8 +980,13 @@ async function loadAnalysisCsv() {
         updateDashboardFromAnalyses();
         return;
       }
+
+      clearReportState("Nenhum relatorio CHB compartilhado salvo. Envie um novo relatorio.", "Sem relatorio salvo");
+      return;
     } catch (error) {
       console.warn("Relatorio CHB compartilhado indisponivel", error);
+      clearReportState("Nao foi possivel acessar o relatorio compartilhado. Confira a tabela relatorios_chb no Supabase.", "Erro no Supabase");
+      return;
     }
   }
 
