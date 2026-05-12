@@ -348,7 +348,7 @@ function buildSchedulePrintHtml() {
     ? rows
         .map((item) => {
           const info = getFleetInfo(item.fleet);
-          const status = item.done ? "REALIZADA" : "PENDENTE";
+          const status = serviceStatus(item).toUpperCase();
           const result = item.result ? `<br><span style="font-size: 9px; color: #555; font-weight: bold;">(Res: ${escapeHtml(item.result)})</span>` : "";
           return `
             <tr>
@@ -433,7 +433,7 @@ function openSchedulePrintReport() {
 }
 
 function renderScheduleItem(item) {
-  const status = item.done ? "REALIZADA" : "PENDENTE";
+  const status = serviceStatus(item).toUpperCase();
   const resultLabel = item.result ? `<em>${item.result}</em>` : "";
   return `
     <button class="service-card ${serviceCardClass(item)}" type="button" data-service-id="${item.id}">
@@ -448,22 +448,50 @@ function renderScheduleItem(item) {
   `;
 }
 
+function serviceStatus(item) {
+  if (item.status) return item.status;
+  return item.done ? "Realizada" : "Pendente";
+}
+
+function isBrokenService(item) {
+  return serviceStatus(item) === "Quebrada";
+}
+
+function isDoneService(item) {
+  return serviceStatus(item) === "Realizada";
+}
+
+function countableScheduleItems(items) {
+  return items.filter((item) => !isBrokenService(item));
+}
+
+function scheduleProgress(items) {
+  const countable = countableScheduleItems(items);
+  const done = countable.filter(isDoneService).length;
+  const percent = countable.length ? Math.round((done / countable.length) * 100) : 0;
+  return { countable, done, percent, broken: items.filter(isBrokenService).length };
+}
+
 function serviceCardClass(item) {
+  if (isBrokenService(item)) return "broken";
   if (item.result === "Critico") return "critical";
   if (item.result === "Anomalia") return "anomaly";
-  if (item.done) return "done";
+  if (isDoneService(item)) return "done";
   return "pending";
 }
 
 function renderScheduleSummary() {
   const items = filterScheduleItems(getVisibleScheduleItems());
-  const done = items.filter((item) => item.done).length;
+  const countable = countableScheduleItems(items);
+  const done = countable.filter(isDoneService).length;
+  const broken = items.filter(isBrokenService).length;
   const anomaly = items.filter((item) => item.result === "Anomalia").length;
   const critical = items.filter((item) => item.result === "Critico").length;
 
-  document.querySelector("#schedule-summary-total").textContent = items.length.toLocaleString("pt-BR");
+  document.querySelector("#schedule-summary-total").textContent = countable.length.toLocaleString("pt-BR");
   document.querySelector("#schedule-summary-done").textContent = done.toLocaleString("pt-BR");
-  document.querySelector("#schedule-summary-pending").textContent = (items.length - done).toLocaleString("pt-BR");
+  document.querySelector("#schedule-summary-pending").textContent = (countable.length - done).toLocaleString("pt-BR");
+  document.querySelector("#schedule-summary-broken").textContent = broken.toLocaleString("pt-BR");
   document.querySelector("#schedule-summary-anomaly").textContent = anomaly.toLocaleString("pt-BR");
   document.querySelector("#schedule-summary-critical").textContent = critical.toLocaleString("pt-BR");
 }
@@ -487,10 +515,9 @@ function renderWeekSchedule() {
     .map((date) => {
       const key = toDateKey(date);
       const items = filterScheduleItems(scheduleItems.filter((item) => item.date === key));
-      const done = items.filter((item) => item.done).length;
-      const percent = items.length ? Math.round((done / items.length) * 100) : 0;
+      const { countable, done, percent, broken } = scheduleProgress(items);
       return `
-        <article class="schedule-day ${progressClass(percent, items.length)}" data-schedule-date="${key}">
+        <article class="schedule-day ${progressClass(percent, countable.length)}" data-schedule-date="${key}">
           <div class="schedule-day-liquid">
             <div class="day-fill" style="height:${percent}%"></div>
             <div class="liquid-wave" style="--fill-level:${percent}%"></div>
@@ -498,7 +525,7 @@ function renderWeekSchedule() {
               <strong>${date.toLocaleDateString("pt-BR", { weekday: "short" })}</strong>
               <span>${formatDate(key)}</span>
             </div>
-            <div class="schedule-progress-text">${done}/${items.length || 0} realizados</div>
+            <div class="schedule-progress-text">${done}/${countable.length || 0} realizados${broken ? ` | ${broken} quebrada(s)` : ""}</div>
           </div>
           <div class="schedule-list">
             ${items.length ? items.map(renderScheduleItem).join("") : `<div class="empty-state">Sem coletas</div>`}
@@ -521,17 +548,16 @@ function renderMonthSchedule() {
     .map((date) => {
       const key = toDateKey(date);
       const items = filterScheduleItems(scheduleItems.filter((item) => item.date === key));
-      const done = items.filter((item) => item.done).length;
-      const percent = items.length ? Math.round((done / items.length) * 100) : 0;
+      const { countable, done, percent, broken } = scheduleProgress(items);
       const outside = date.getMonth() !== scheduleAnchor.getMonth();
       return `
-        <article class="month-day ${outside ? "outside-month" : ""} ${progressClass(percent, items.length)}" data-schedule-date="${key}">
+        <article class="month-day ${outside ? "outside-month" : ""} ${progressClass(percent, countable.length)}" data-schedule-date="${key}">
           <div class="day-fill" style="height:${percent}%"></div>
           <div class="liquid-wave" style="--fill-level:${percent}%"></div>
           <div class="month-day-content">
             <div class="month-day-header">
               <strong>${date.getDate()}</strong>
-              <span>${done}/${items.length || 0}</span>
+              <span>${done}/${countable.length || 0}${broken ? ` +${broken}Q` : ""}</span>
             </div>
             <div class="month-day-list">
               ${items.slice(0, 3).map(renderScheduleItem).join("")}
@@ -561,15 +587,15 @@ function openScheduleModal(dateKey) {
   const subtitle = document.querySelector("#schedule-modal-subtitle");
   const list = document.querySelector("#modal-task-list");
   const items = filterScheduleItems(scheduleItems.filter((item) => item.date === dateKey));
-  const done = items.filter((item) => item.done).length;
+  const { countable, done, broken } = scheduleProgress(items);
 
   title.textContent = `Servicos de ${formatDate(dateKey)}`;
-  subtitle.textContent = `${done}/${items.length || 0} realizados`;
+  subtitle.textContent = `${done}/${countable.length || 0} realizados${broken ? ` | ${broken} quebrada(s)` : ""}`;
   list.innerHTML = items.length
     ? items
         .map(
           (item) => `
-            <div class="modal-task ${item.done ? "done" : ""}">
+            <div class="modal-task ${serviceCardClass(item)}">
               ${renderScheduleItem(item)}
               <button class="danger-button" type="button" data-delete-schedule-id="${item.id}">Excluir</button>
             </div>
@@ -590,7 +616,7 @@ function openServiceModal(id) {
 
   document.querySelector("#service-fleet-code").textContent = item.fleet;
   document.querySelector("#service-compartment").value = item.compartment;
-  document.querySelector("#service-status").value = item.done ? "Realizada" : "Pendente";
+  document.querySelector("#service-status").value = serviceStatus(item);
   document.querySelector("#service-result").value = item.result || "";
   document.querySelector("#service-completion-date").value = item.completionDate || item.date;
   document.querySelector("#service-location").value = item.location || "Base (Oficina)";
@@ -780,13 +806,15 @@ function selectResultService(source, id) {
 }
 
 function scheduleFromDb(record) {
+  const status = record.status_servico || (record.realizado ? "Realizada" : "Pendente");
   return {
     id: record.id,
     dbId: record.id,
     date: record.scheduled_date,
     fleet: record.cod_frota,
     compartment: record.compartimento,
-    done: Boolean(record.realizado),
+    status,
+    done: status === "Realizada",
     result: record.resultado || "",
     completionDate: record.data_conclusao || "",
     location: record.local_execucao || "Base (Oficina)",
@@ -796,11 +824,13 @@ function scheduleFromDb(record) {
 }
 
 function scheduleToDb(item) {
+  const status = serviceStatus(item);
   return {
     scheduled_date: item.date,
     cod_frota: item.fleet,
     compartimento: item.compartment,
-    realizado: Boolean(item.done),
+    realizado: status === "Realizada",
+    status_servico: status,
     resultado: item.result || null,
     data_conclusao: item.completionDate || null,
     local_execucao: item.location || null,
@@ -1597,7 +1627,8 @@ document.querySelector("#service-form").addEventListener("submit", async (event)
   if (!item) return;
 
   item.compartment = document.querySelector("#service-compartment").value.trim();
-  item.done = document.querySelector("#service-status").value === "Realizada";
+  item.status = document.querySelector("#service-status").value;
+  item.done = item.status === "Realizada";
   item.result = document.querySelector("#service-result").value;
   item.completionDate = document.querySelector("#service-completion-date").value;
   item.location = document.querySelector("#service-location").value;

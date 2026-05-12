@@ -4,6 +4,7 @@ create table if not exists public.programacao_coletas (
   cod_frota text not null,
   compartimento text not null,
   realizado boolean default false,
+  status_servico text default 'Pendente',
   resultado text,
   data_conclusao date,
   local_execucao text,
@@ -11,6 +12,11 @@ create table if not exists public.programacao_coletas (
   acao_recomendada text,
   created_at timestamp with time zone default now()
 );
+
+alter table public.programacao_coletas add column if not exists status_servico text default 'Pendente';
+update public.programacao_coletas
+set status_servico = case when realizado then 'Realizada' else 'Pendente' end
+where status_servico is null;
 
 alter table public.programacao_coletas enable row level security;
 

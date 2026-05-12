@@ -585,7 +585,7 @@ textarea {
 
 .schedule-summary-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  grid-template-columns: repeat(6, minmax(110px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -616,6 +616,10 @@ textarea {
 
 .schedule-summary-card.pending {
   border-left-color: #64748b;
+}
+
+.schedule-summary-card.broken {
+  border-left-color: #7c3aed;
 }
 
 .schedule-summary-card.warning {
@@ -826,6 +830,10 @@ textarea {
 
 .service-card.done {
   background: #15803d;
+}
+
+.service-card.broken {
+  background: #6d28d9;
 }
 
 .service-card.anomaly {
@@ -1074,6 +1082,21 @@ textarea {
 .modal-task.done {
   border-color: #b7ebc6;
   background: #f1fff5;
+}
+
+.modal-task.broken {
+  border-color: #ddd6fe;
+  background: #f5f3ff;
+}
+
+.modal-task.anomaly {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.modal-task.critical {
+  border-color: #fecaca;
+  background: #fff1f2;
 }
 
 .modal-task label {
