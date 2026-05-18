@@ -647,6 +647,20 @@ textarea {
   align-items: center;
 }
 
+.storage-status,
+.form-status {
+  display: inline-flex;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.storage-status.error,
+.form-status.error {
+  color: var(--danger);
+}
+
 .schedule-add-form {
   display: grid;
   grid-template-columns: minmax(150px, 0.7fr) minmax(220px, 1fr) minmax(160px, 0.7fr) auto auto;

@@ -29,6 +29,7 @@ let scheduleAnchor = new Date();
 let selectedScheduleDate = "";
 let selectedServiceId = null;
 let scheduleDbEnabled = false;
+let lastScheduleDbError = "";
 let currentUserRole = "coletor";
 let batchEndDateTouched = false;
 let scheduleSearchTerm = "";
@@ -808,6 +809,9 @@ function openServiceModal(id) {
   document.querySelector("#service-result").value = item.result || "";
   document.querySelector("#service-completion-date").value = item.completionDate || item.date;
   document.querySelector("#service-location").value = item.location || "Base (Oficina)";
+  const statusMessage = document.querySelector("#service-save-status");
+  statusMessage.textContent = "";
+  statusMessage.classList.remove("error");
   document.querySelector("#service-modal").showModal();
 }
 
@@ -1027,8 +1031,35 @@ function scheduleToDb(item) {
   };
 }
 
+function explainScheduleError(error) {
+  const message = error?.message || String(error || "Erro desconhecido");
+  if (message.includes("status_servico")) {
+    return "A coluna status_servico ainda nao existe no Supabase. Rode o supabase_schema.sql atualizado.";
+  }
+  if (message.includes("JWT") || message.includes("auth") || message.includes("permission")) {
+    return "Sessao expirada ou sem permissao. Saia e entre novamente.";
+  }
+  return message;
+}
+
+function setScheduleStorageStatus(message, isError = false) {
+  const status = document.querySelector("#schedule-db-status");
+  if (status) {
+    status.textContent = message;
+    status.classList.toggle("error", isError);
+  }
+}
+
 async function loadScheduleFromSupabase() {
-  if (!supabaseClient) return;
+  if (!supabaseClient) {
+    scheduleDbEnabled = false;
+    lastScheduleDbError = "Supabase nao configurado.";
+    scheduleItems.splice(0, scheduleItems.length);
+    setScheduleStorageStatus("Banco de dados: indisponivel", true);
+    renderSchedule();
+    renderResultsQueue();
+    return;
+  }
 
   const { data, error } = await supabaseClient
     .from("programacao_coletas")
@@ -1038,10 +1069,18 @@ async function loadScheduleFromSupabase() {
 
   if (error) {
     scheduleDbEnabled = false;
+    lastScheduleDbError = explainScheduleError(error);
+    scheduleItems.splice(0, scheduleItems.length);
+    nextScheduleId = 1;
+    setScheduleStorageStatus(`Banco de dados: erro ao carregar programacao. ${lastScheduleDbError}`, true);
+    renderSchedule();
+    renderResultsQueue();
     return;
   }
 
   scheduleDbEnabled = true;
+  lastScheduleDbError = "";
+  setScheduleStorageStatus("Banco de dados: programacao sincronizada");
   scheduleItems.splice(0, scheduleItems.length, ...data.map(scheduleFromDb));
   nextScheduleId = Math.max(0, ...scheduleItems.map((item) => Number(item.id) || 0)) + 1;
   renderSchedule();
@@ -1049,7 +1088,9 @@ async function loadScheduleFromSupabase() {
 }
 
 async function saveScheduleItem(item) {
-  if (!scheduleDbEnabled || !supabaseClient) return item;
+  if (!scheduleDbEnabled || !supabaseClient) {
+    throw new Error(lastScheduleDbError || "Banco de dados da programacao indisponivel. Recarregue a pagina e confirme o Supabase.");
+  }
 
   if (item.dbId) {
     const { error } = await supabaseClient
@@ -1072,7 +1113,10 @@ async function saveScheduleItem(item) {
 }
 
 async function deleteScheduleItem(item) {
-  if (!scheduleDbEnabled || !supabaseClient || !item.dbId) return;
+  if (!scheduleDbEnabled || !supabaseClient) {
+    throw new Error(lastScheduleDbError || "Banco de dados da programacao indisponivel.");
+  }
+  if (!item.dbId) throw new Error("Servico ainda nao possui registro salvo no banco.");
   const { error } = await supabaseClient.from("programacao_coletas").delete().eq("id", item.dbId);
   if (error) throw error;
 }
@@ -1640,18 +1684,18 @@ document.querySelector("#schedule-add-form").addEventListener("submit", async (e
   try {
     for (const fleetCode of fleets) {
       const item = {
-      id: nextScheduleId,
-      date,
-      fleet: fleetCode,
-      compartment,
-      done: false,
+        id: nextScheduleId,
+        date,
+        fleet: fleetCode,
+        compartment,
+        done: false,
       };
+      await saveScheduleItem(item);
       scheduleItems.push(item);
       nextScheduleId += 1;
-      await saveScheduleItem(item);
     }
   } catch (error) {
-    message.textContent = `Erro ao gravar programacao: ${error.message}`;
+    message.textContent = `Erro ao gravar programacao: ${explainScheduleError(error)}`;
     return;
   }
 
@@ -1707,18 +1751,18 @@ document.querySelector("#batch-schedule-form").addEventListener("submit", async 
   try {
     for (const entry of distribution) {
       const item = {
-      id: nextScheduleId,
-      date: entry.date,
-      fleet: entry.fleetCode,
-      compartment,
-      done: false,
+        id: nextScheduleId,
+        date: entry.date,
+        fleet: entry.fleetCode,
+        compartment,
+        done: false,
       };
+      await saveScheduleItem(item);
       scheduleItems.push(item);
       nextScheduleId += 1;
-      await saveScheduleItem(item);
     }
   } catch (error) {
-    message.textContent = `Erro ao gravar programacao: ${error.message}`;
+    message.textContent = `Erro ao gravar programacao: ${explainScheduleError(error)}`;
     return;
   }
 
@@ -1793,6 +1837,7 @@ document.querySelector("#modal-task-list").addEventListener("click", async (even
       await deleteScheduleItem(scheduleItems[index]);
       scheduleItems.splice(index, 1);
     } catch (error) {
+      setScheduleStorageStatus(`Erro ao excluir servico: ${explainScheduleError(error)}`, true);
       return;
     }
   }
@@ -1814,6 +1859,10 @@ document.querySelector("#service-form").addEventListener("submit", async (event)
   event.preventDefault();
   const item = scheduleItems.find((entry) => entry.id === selectedServiceId);
   if (!item) return;
+  const statusMessage = document.querySelector("#service-save-status");
+  const previousItem = { ...item };
+  statusMessage.textContent = "Salvando...";
+  statusMessage.classList.remove("error");
 
   item.compartment = document.querySelector("#service-compartment").value.trim();
   item.status = document.querySelector("#service-status").value;
@@ -1825,9 +1874,13 @@ document.querySelector("#service-form").addEventListener("submit", async (event)
   try {
     await saveScheduleItem(item);
   } catch (error) {
+    Object.assign(item, previousItem);
+    statusMessage.textContent = `Erro ao salvar: ${explainScheduleError(error)}`;
+    statusMessage.classList.add("error");
     return;
   }
 
+  statusMessage.textContent = "Servico salvo no banco.";
   renderSchedule();
   renderResultsQueue();
   if (selectedScheduleDate && document.querySelector("#schedule-modal").open) {
@@ -1881,13 +1934,15 @@ document.querySelector("#result-detail-form").addEventListener("submit", async (
   if (source === "schedule") {
     const item = scheduleItems.find((entry) => String(entry.id) === String(id));
     if (!item) return;
+    const previousItem = { ...item };
     item.result = document.querySelector("#result-classification").value;
     item.resultDescription = document.querySelector("#result-description").value.trim();
     item.resultAction = document.querySelector("#result-action").value.trim();
     try {
       await saveScheduleItem(item);
     } catch (error) {
-      document.querySelector("#result-form-status").textContent = `Erro ao salvar: ${error.message}`;
+      Object.assign(item, previousItem);
+      document.querySelector("#result-form-status").textContent = `Erro ao salvar: ${explainScheduleError(error)}`;
       return;
     }
   } else {
