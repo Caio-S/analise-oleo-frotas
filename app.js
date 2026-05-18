@@ -20,7 +20,8 @@ let collectionsByDay = [];
 let riskByComponent = [];
 let priorities = [];
 let resultDistribution = [];
-let problemDistribution = [];
+let anomalyCompartmentDistribution = [];
+let anomalyTypeDistribution = [];
 let anomalyFleetDetails = [];
 let analyses = [];
 let filteredAnalyses = [];
@@ -156,16 +157,16 @@ function renderResultDistribution() {
     .join("");
 }
 
-function renderProblemPie() {
-  const panel = document.querySelector("#problem-pie");
-  if (!problemDistribution.length) {
-    panel.innerHTML = `<div class="empty-state">Sem anomalias ou criticas no periodo.</div>`;
+function renderPiePanel(selector, rows, emptyMessage) {
+  const panel = document.querySelector(selector);
+  if (!rows.length) {
+    panel.innerHTML = `<div class="empty-state">${emptyMessage}</div>`;
     return;
   }
 
-  const total = problemDistribution.reduce((sum, item) => sum + item.count, 0);
+  const total = rows.reduce((sum, item) => sum + item.count, 0);
   let cursor = 0;
-  const segments = problemDistribution
+  const segments = rows
     .map((item) => {
       const start = cursor;
       cursor += (item.count / total) * 100;
@@ -178,15 +179,20 @@ function renderProblemPie() {
       <span>${total}</span>
     </div>
     <div class="pie-legend">
-      ${problemDistribution
+      ${rows
         .map(
           (item) => `
-            <div><i style="background:${item.color}"></i><strong>${item.name}</strong><span>${item.count}</span></div>
+            <div><i style="background:${item.color}"></i><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong><span>${item.count}</span></div>
           `
         )
         .join("")}
     </div>
   `;
+}
+
+function renderProblemPies() {
+  renderPiePanel("#problem-pie-compartment", anomalyCompartmentDistribution, "Sem anomalias por compartimento no periodo.");
+  renderPiePanel("#problem-pie-type", anomalyTypeDistribution, "Sem tipos de anomalia no periodo.");
 }
 
 function renderAnomalyFleetDetails() {
@@ -558,18 +564,31 @@ function buildDashboardPrintHtml() {
         .join("")
     : `<div class="empty">Sem resultados no periodo.</div>`;
 
-  const problemRows = problemDistribution.length
-    ? problemDistribution
+  const anomalyCompartmentRows = anomalyCompartmentDistribution.length
+    ? anomalyCompartmentDistribution
         .map(
           (item) => `
             <div class="print-track-row">
               <div><strong>${escapeHtml(item.name)}</strong><span>${item.count}</span></div>
-              <div class="print-track"><div class="${item.name === "Critico" ? "critico" : "anomalia"}" style="width:${Math.max(8, Math.round((item.count / Math.max(metrics.critical + metrics.attention, 1)) * 100))}%"></div></div>
+              <div class="print-track"><div class="anomalia" style="width:${Math.max(8, Math.round((item.count / Math.max(metrics.attention, 1)) * 100))}%"></div></div>
             </div>
           `
         )
         .join("")
-    : `<div class="empty">Sem anomalias ou criticas no periodo.</div>`;
+    : `<div class="empty">Sem anomalias por compartimento no periodo.</div>`;
+
+  const anomalyTypeRows = anomalyTypeDistribution.length
+    ? anomalyTypeDistribution
+        .map(
+          (item) => `
+            <div class="print-track-row">
+              <div><strong>${escapeHtml(item.name)}</strong><span>${item.count}</span></div>
+              <div class="print-track"><div class="anomalia" style="width:${Math.max(8, Math.round((item.count / Math.max(metrics.attention, 1)) * 100))}%"></div></div>
+            </div>
+          `
+        )
+        .join("")
+    : `<div class="empty">Sem tipos de anomalia no periodo.</div>`;
 
   const anomalyFleetRows = anomalyFleetDetails.length
     ? anomalyFleetDetails
@@ -677,7 +696,8 @@ function buildDashboardPrintHtml() {
       <article class="panel wide"><h2>Coletas por dia</h2><div class="bars">${collectionBars}</div></article>
       <article class="panel"><h2>Incidencia critica por compartimento</h2>${riskRows}</article>
       <article class="panel"><h2>Distribuicao dos resultados</h2>${resultRows}</article>
-      <article class="panel"><h2>Problemas por severidade</h2>${problemRows}</article>
+      <article class="panel"><h2>Anomalias por compartimento</h2>${anomalyCompartmentRows}</article>
+      <article class="panel"><h2>Tipos de anomalia</h2>${anomalyTypeRows}</article>
       <article class="panel wide">
         <h2>Prioridades da manutencao</h2>
         <table>
@@ -1301,19 +1321,25 @@ function updateDashboardFromAnalyses() {
       className: classifyAnalysis(name).toLowerCase(),
     }));
 
-  const problemCounts = filteredAnalyses
-    .filter((item) => item.classificacao !== "Normal")
-    .reduce((summary, item) => {
-      summary[item.classificacao] = (summary[item.classificacao] || 0) + 1;
-      return summary;
-    }, {});
-  problemDistribution = ["Anomalia", "Critico"]
-    .filter((name) => problemCounts[name])
-    .map((name) => ({
-      name,
-      count: problemCounts[name],
-      color: name === "Critico" ? "#dc2626" : "#d97706",
-    }));
+  const pieColors = ["#d97706", "#0ea5e9", "#7c3aed", "#16a34a", "#f97316", "#dc2626", "#0891b2", "#a16207"];
+  const anomalyRows = filteredAnalyses.filter((item) => item.classificacao === "Anomalia");
+  const anomalyCompartments = anomalyRows.reduce((summary, item) => {
+    const key = item.compartimento || "Sem compartimento";
+    summary[key] = (summary[key] || 0) + 1;
+    return summary;
+  }, {});
+  anomalyCompartmentDistribution = Object.entries(anomalyCompartments)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([name, count], index) => ({ name, count, color: pieColors[index % pieColors.length] }));
+
+  const anomalyTypes = anomalyRows.reduce((summary, item) => {
+    const key = item.resultado || "Anomalia sem descricao";
+    summary[key] = (summary[key] || 0) + 1;
+    return summary;
+  }, {});
+  anomalyTypeDistribution = Object.entries(anomalyTypes)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([name, count], index) => ({ name, count, color: pieColors[index % pieColors.length] }));
 
   const anomalyGroups = filteredAnalyses
     .filter((item) => item.classificacao === "Anomalia")
@@ -1346,7 +1372,7 @@ function updateDashboardFromAnalyses() {
   renderRisks();
   renderPriorities();
   renderResultDistribution();
-  renderProblemPie();
+  renderProblemPies();
   renderAnomalyFleetDetails();
   renderResultsQueue();
 }
