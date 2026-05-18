@@ -524,6 +524,7 @@ function buildDashboardPrintHtml() {
   const uploadedBy = document.querySelector("#report-uploaded-by").textContent.replace("Responsavel: ", "") || "--";
   const riskRows = riskByComponent.length
     ? riskByComponent
+        .slice(0, 10)
         .map(
           (item) => `
             <div class="print-track-row">
@@ -537,6 +538,7 @@ function buildDashboardPrintHtml() {
 
   const resultRows = resultDistribution.length
     ? resultDistribution
+        .slice(0, 6)
         .map(
           (item) => `
             <div class="print-track-row">
@@ -565,6 +567,7 @@ function buildDashboardPrintHtml() {
         <div class="print-pie" style="background: conic-gradient(${segments})"><span>${total}</span></div>
         <div class="print-pie-legend">
           ${rows
+            .slice(0, 7)
             .map((item) => {
               const percent = Math.round((item.count / total) * 100);
               return `
@@ -586,6 +589,7 @@ function buildDashboardPrintHtml() {
 
   const anomalyFleetRows = anomalyFleetDetails.length
     ? anomalyFleetDetails
+        .slice(0, 10)
         .map(
           (item) => `
             <tr>
@@ -600,6 +604,7 @@ function buildDashboardPrintHtml() {
 
   const priorityRows = priorities.length
     ? priorities
+        .slice(0, 12)
         .map(
           (row) => `
             <tr>
@@ -620,43 +625,43 @@ function buildDashboardPrintHtml() {
   <meta charset="UTF-8">
   <title>Dashboard de Analise de Oleo</title>
   <style>
-    body { margin: 0; padding: 18px; background: #eef2f6; color: #111827; font-family: Arial, Calibri, sans-serif; }
+    body { margin: 0; padding: 12px; background: #eef2f6; color: #111827; font-family: Arial, Calibri, sans-serif; }
     .no-print { max-width: 794px; margin: 0 auto 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; background: #fff; border: 1px solid #d9e1ea; border-radius: 8px; padding: 14px 18px; box-shadow: 0 4px 12px rgba(15,23,42,0.08); }
     .btn-print { border: 0; border-radius: 6px; padding: 10px 16px; background: #0d6efd; color: #fff; font-weight: 800; cursor: pointer; }
-    .sheet { max-width: 794px; min-height: 1123px; margin: 0 auto; background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 0 12px rgba(15,23,42,0.12); }
-    .header { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; border-bottom: 2px solid #111827; padding-bottom: 12px; margin-bottom: 14px; }
-    .header h1 { margin: 0 0 6px; font-size: 22px; text-transform: uppercase; }
-    .header p { margin: 2px 0; font-size: 12px; color: #475467; }
+    .sheet { max-width: 794px; min-height: 1123px; margin: 0 auto; background: #fff; border-radius: 8px; padding: 14px; box-shadow: 0 0 12px rgba(15,23,42,0.12); }
+    .header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; border-bottom: 2px solid #111827; padding-bottom: 8px; margin-bottom: 9px; }
+    .header h1 { margin: 0 0 4px; font-size: 18px; text-transform: uppercase; }
+    .header p { margin: 1px 0; font-size: 10px; color: #475467; }
     .meta { text-align: right; }
-    .metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 14px; }
-    .metric { border: 1px solid #d9e1ea; border-left: 5px solid #1976d2; border-radius: 8px; padding: 12px; }
+    .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-bottom: 8px; }
+    .metric { border: 1px solid #d9e1ea; border-left: 4px solid #1976d2; border-radius: 6px; padding: 8px; }
     .metric.warning { border-left-color: #d97706; }
     .metric.danger { border-left-color: #dc2626; }
-    .metric span { display: block; color: #475467; font-size: 12px; }
-    .metric strong { display: block; font-size: 28px; margin: 5px 0; }
-    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
-    .panel { border: 1px solid #d9e1ea; border-radius: 8px; padding: 12px; break-inside: avoid; }
-    .panel h2 { margin: 0 0 10px; font-size: 15px; }
-    .print-track-row { display: grid; gap: 5px; margin-bottom: 10px; }
-    .print-track-row div:first-child { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; }
-    .print-track { height: 10px; background: #eef2f6; border-radius: 999px; overflow: hidden; }
+    .metric span { display: block; color: #475467; font-size: 9.5px; }
+    .metric strong { display: block; font-size: 20px; margin: 3px 0; }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .panel { border: 1px solid #d9e1ea; border-radius: 6px; padding: 8px; break-inside: avoid; }
+    .panel h2 { margin: 0 0 6px; font-size: 12px; }
+    .print-track-row { display: grid; gap: 3px; margin-bottom: 6px; }
+    .print-track-row div:first-child { display: flex; justify-content: space-between; gap: 8px; font-size: 9.5px; }
+    .print-track { height: 7px; background: #eef2f6; border-radius: 999px; overflow: hidden; }
     .print-track div { height: 100%; background: #dc2626; border-radius: inherit; }
     .print-track div.atencao, .print-track div.anomalia { background: #d97706; }
     .print-track div.normal { background: #16a34a; }
     .print-track div.critico { background: #dc2626; }
-    .print-pie-panel { display: grid; grid-template-columns: 150px 1fr; gap: 14px; align-items: center; }
-    .print-pie { width: 150px; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; position: relative; box-shadow: inset 0 0 0 1px rgba(15,23,42,0.1); }
-    .print-pie::after { content: ""; position: absolute; width: 72px; aspect-ratio: 1; border-radius: 50%; background: #fff; }
-    .print-pie span { position: relative; z-index: 1; font-size: 22px; font-weight: 900; }
-    .print-pie-legend { display: grid; gap: 7px; }
-    .print-pie-legend div { display: grid; grid-template-columns: 10px 1fr auto; gap: 7px; align-items: center; font-size: 10.5px; color: #475467; }
-    .print-pie-legend i { width: 10px; height: 10px; border-radius: 999px; }
+    .print-pie-panel { display: grid; grid-template-columns: 104px 1fr; gap: 9px; align-items: center; }
+    .print-pie { width: 104px; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; position: relative; box-shadow: inset 0 0 0 1px rgba(15,23,42,0.1); }
+    .print-pie::after { content: ""; position: absolute; width: 48px; aspect-ratio: 1; border-radius: 50%; background: #fff; }
+    .print-pie span { position: relative; z-index: 1; font-size: 16px; font-weight: 900; }
+    .print-pie-legend { display: grid; gap: 4px; }
+    .print-pie-legend div { display: grid; grid-template-columns: 8px 1fr auto; gap: 5px; align-items: center; font-size: 8.8px; color: #475467; }
+    .print-pie-legend i { width: 8px; height: 8px; border-radius: 999px; }
     .print-pie-legend strong { color: #111827; overflow-wrap: anywhere; }
-    table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    th, td { border: 1px solid #d9e1ea; padding: 6px; text-align: left; vertical-align: top; }
-    th { background: #f1f5f9; text-transform: uppercase; font-size: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 8.8px; }
+    th, td { border: 1px solid #d9e1ea; padding: 3px 4px; text-align: left; vertical-align: top; }
+    th { background: #f1f5f9; text-transform: uppercase; font-size: 8px; }
     .wide { grid-column: 1 / -1; }
-    .empty { color: #667085; font-size: 12px; padding: 10px; border: 1px dashed #cbd5e1; border-radius: 6px; }
+    .empty { color: #667085; font-size: 10px; padding: 7px; border: 1px dashed #cbd5e1; border-radius: 6px; }
     @media print {
       body { padding: 0; background: #fff; }
       .no-print { display: none !important; }
