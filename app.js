@@ -522,22 +522,6 @@ function buildDashboardPrintHtml() {
   const reportName = document.querySelector("#report-file-name").textContent || "Relatorio CHB";
   const uploadedAt = document.querySelector("#report-uploaded-at").textContent.replace("Ultima atualizacao: ", "") || "--";
   const uploadedBy = document.querySelector("#report-uploaded-by").textContent.replace("Responsavel: ", "") || "--";
-  const maxCollections = Math.max(...collectionsByDay.map((item) => item.count), 1);
-
-  const collectionBars = collectionsByDay.length
-    ? collectionsByDay
-        .map((item) => {
-          const height = Math.max(18, Math.round((item.count / maxCollections) * 180));
-          return `
-            <div class="print-bar-wrap">
-              <div class="print-bar" style="height:${height}px"><span>${item.count}</span></div>
-              <small>${escapeHtml(item.date.slice(0, 5))}</small>
-            </div>
-          `;
-        })
-        .join("")
-    : `<div class="empty">Sem dados de coleta para o periodo.</div>`;
-
   const riskRows = riskByComponent.length
     ? riskByComponent
         .map(
@@ -653,10 +637,6 @@ function buildDashboardPrintHtml() {
     .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
     .panel { border: 1px solid #d9e1ea; border-radius: 8px; padding: 12px; break-inside: avoid; }
     .panel h2 { margin: 0 0 10px; font-size: 15px; }
-    .bars { height: 230px; display: flex; gap: 8px; align-items: flex-end; border-bottom: 1px solid #cbd5e1; padding: 0 8px 6px; }
-    .print-bar-wrap { flex: 1; min-width: 24px; display: grid; justify-items: center; gap: 4px; }
-    .print-bar { width: 100%; max-width: 42px; background: #1976d2; border-radius: 5px 5px 0 0; display: flex; align-items: flex-start; justify-content: center; color: #fff; font-size: 10px; font-weight: 800; padding-top: 4px; box-sizing: border-box; }
-    .print-bar-wrap small { font-size: 9px; color: #475467; writing-mode: vertical-rl; transform: rotate(180deg); height: 42px; }
     .print-track-row { display: grid; gap: 5px; margin-bottom: 10px; }
     .print-track-row div:first-child { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; }
     .print-track { height: 10px; background: #eef2f6; border-radius: 999px; overflow: hidden; }
@@ -711,7 +691,6 @@ function buildDashboardPrintHtml() {
       <article class="metric danger"><span>Criticas abertas</span><strong>${metrics.critical.toLocaleString("pt-BR")}</strong><span>${metrics.criticalRate}% da amostragem</span></article>
     </section>
     <section class="grid">
-      <article class="panel wide"><h2>Coletas por dia</h2><div class="bars">${collectionBars}</div></article>
       <article class="panel"><h2>Incidencia critica por compartimento</h2>${riskRows}</article>
       <article class="panel"><h2>Distribuicao dos resultados</h2>${resultRows}</article>
       <article class="panel"><h2>Anomalias por compartimento</h2>${anomalyCompartmentRows}</article>
