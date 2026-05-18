@@ -558,6 +558,10 @@ h2 {
   line-height: 1.45;
 }
 
+.anomaly-fleet-item b {
+  color: var(--ink);
+}
+
 .fleet-fill {
   background: var(--primary);
 }

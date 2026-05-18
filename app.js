@@ -192,7 +192,7 @@ function renderProblemPie() {
 function renderAnomalyFleetDetails() {
   const list = document.querySelector("#anomaly-fleet-list");
   if (!anomalyFleetDetails.length) {
-    list.innerHTML = `<div class="empty-state">Sem frotas com anomalia no periodo.</div>`;
+    list.innerHTML = `<div class="empty-state">Sem anomalias no periodo.</div>`;
     return;
   }
 
@@ -201,10 +201,10 @@ function renderAnomalyFleetDetails() {
       (item) => `
         <div class="anomaly-fleet-item">
           <div>
-            <strong>${item.fleet}</strong>
-            <span>${item.count} anomalia(s)</span>
+            <strong>${escapeHtml(item.anomaly)}</strong>
+            <span>${item.count} ocorrencia(s)</span>
           </div>
-          <p>${item.anomalies.join("; ")}</p>
+          <p>${item.fleets.map((fleet) => `<b>${escapeHtml(fleet.code)}</b> (${escapeHtml(fleet.compartments.join(", "))})`).join("; ")}</p>
         </div>
       `
     )
@@ -576,14 +576,14 @@ function buildDashboardPrintHtml() {
         .map(
           (item) => `
             <tr>
-              <td><strong>${escapeHtml(item.fleet)}</strong></td>
+              <td><strong>${escapeHtml(item.anomaly)}</strong></td>
               <td>${item.count}</td>
-              <td>${escapeHtml(item.anomalies.join("; "))}</td>
+              <td>${item.fleets.map((fleet) => `${escapeHtml(fleet.code)} (${escapeHtml(fleet.compartments.join(", "))})`).join("; ")}</td>
             </tr>
           `
         )
         .join("")
-    : `<tr><td colspan="3">Sem frotas com anomalia no periodo.</td></tr>`;
+    : `<tr><td colspan="3">Sem anomalias no periodo.</td></tr>`;
 
   const priorityRows = priorities.length
     ? priorities
@@ -688,7 +688,7 @@ function buildDashboardPrintHtml() {
       <article class="panel wide">
         <h2>Frotas com anomalia</h2>
         <table>
-          <thead><tr><th>Frota</th><th>Qtd.</th><th>Anomalias encontradas</th></tr></thead>
+          <thead><tr><th>Anomalia</th><th>Qtd.</th><th>Frotas afetadas</th></tr></thead>
           <tbody>${anomalyFleetRows}</tbody>
         </table>
       </article>
@@ -1315,21 +1315,30 @@ function updateDashboardFromAnalyses() {
       color: name === "Critico" ? "#dc2626" : "#d97706",
     }));
 
-  const anomalyByFleet = filteredAnalyses
+  const anomalyGroups = filteredAnalyses
     .filter((item) => item.classificacao === "Anomalia")
     .reduce((summary, item) => {
-      const key = item.cod_frota || "-";
-      if (!summary[key]) summary[key] = { fleet: key, count: 0, anomalies: new Set() };
-      summary[key].count += 1;
-      summary[key].anomalies.add(`${item.compartimento}: ${item.resultado}`);
+      const anomaly = item.resultado || "Anomalia sem descricao";
+      const fleetCode = item.cod_frota || "-";
+      if (!summary[anomaly]) summary[anomaly] = { anomaly, count: 0, fleets: {} };
+      if (!summary[anomaly].fleets[fleetCode]) {
+        summary[anomaly].fleets[fleetCode] = { code: fleetCode, compartments: new Set() };
+      }
+      summary[anomaly].count += 1;
+      summary[anomaly].fleets[fleetCode].compartments.add(item.compartimento || "Sem compartimento");
       return summary;
     }, {});
-  anomalyFleetDetails = Object.values(anomalyByFleet)
-    .sort((a, b) => b.count - a.count || String(a.fleet).localeCompare(String(b.fleet)))
+  anomalyFleetDetails = Object.values(anomalyGroups)
+    .sort((a, b) => b.count - a.count || String(a.anomaly).localeCompare(String(b.anomaly)))
     .map((item) => ({
-      fleet: item.fleet,
+      anomaly: item.anomaly,
       count: item.count,
-      anomalies: [...item.anomalies],
+      fleets: Object.values(item.fleets)
+        .sort((a, b) => String(a.code).localeCompare(String(b.code)))
+        .map((fleetItem) => ({
+          code: fleetItem.code,
+          compartments: [...fleetItem.compartments].sort(),
+        })),
     }));
 
   renderDashboardMetrics();
