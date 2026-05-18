@@ -564,31 +564,41 @@ function buildDashboardPrintHtml() {
         .join("")
     : `<div class="empty">Sem resultados no periodo.</div>`;
 
-  const anomalyCompartmentRows = anomalyCompartmentDistribution.length
-    ? anomalyCompartmentDistribution
-        .map(
-          (item) => `
-            <div class="print-track-row">
-              <div><strong>${escapeHtml(item.name)}</strong><span>${item.count}</span></div>
-              <div class="print-track"><div class="anomalia" style="width:${Math.max(8, Math.round((item.count / Math.max(metrics.attention, 1)) * 100))}%"></div></div>
-            </div>
-          `
-        )
-        .join("")
-    : `<div class="empty">Sem anomalias por compartimento no periodo.</div>`;
+  const buildPrintPie = (rows, emptyMessage) => {
+    if (!rows.length) return `<div class="empty">${emptyMessage}</div>`;
+    const total = rows.reduce((sum, item) => sum + item.count, 0);
+    let cursor = 0;
+    const segments = rows
+      .map((item) => {
+        const start = cursor;
+        cursor += (item.count / total) * 100;
+        return `${item.color} ${start}% ${cursor}%`;
+      })
+      .join(", ");
 
-  const anomalyTypeRows = anomalyTypeDistribution.length
-    ? anomalyTypeDistribution
-        .map(
-          (item) => `
-            <div class="print-track-row">
-              <div><strong>${escapeHtml(item.name)}</strong><span>${item.count}</span></div>
-              <div class="print-track"><div class="anomalia" style="width:${Math.max(8, Math.round((item.count / Math.max(metrics.attention, 1)) * 100))}%"></div></div>
-            </div>
-          `
-        )
-        .join("")
-    : `<div class="empty">Sem tipos de anomalia no periodo.</div>`;
+    return `
+      <div class="print-pie-panel">
+        <div class="print-pie" style="background: conic-gradient(${segments})"><span>${total}</span></div>
+        <div class="print-pie-legend">
+          ${rows
+            .map((item) => {
+              const percent = Math.round((item.count / total) * 100);
+              return `
+                <div>
+                  <i style="background:${item.color}"></i>
+                  <strong>${escapeHtml(item.name)}</strong>
+                  <span>${item.count} (${percent}%)</span>
+                </div>
+              `;
+            })
+            .join("")}
+        </div>
+      </div>
+    `;
+  };
+
+  const anomalyCompartmentRows = buildPrintPie(anomalyCompartmentDistribution, "Sem anomalias por compartimento no periodo.");
+  const anomalyTypeRows = buildPrintPie(anomalyTypeDistribution, "Sem tipos de anomalia no periodo.");
 
   const anomalyFleetRows = anomalyFleetDetails.length
     ? anomalyFleetDetails
@@ -654,6 +664,14 @@ function buildDashboardPrintHtml() {
     .print-track div.atencao, .print-track div.anomalia { background: #d97706; }
     .print-track div.normal { background: #16a34a; }
     .print-track div.critico { background: #dc2626; }
+    .print-pie-panel { display: grid; grid-template-columns: 150px 1fr; gap: 14px; align-items: center; }
+    .print-pie { width: 150px; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; position: relative; box-shadow: inset 0 0 0 1px rgba(15,23,42,0.1); }
+    .print-pie::after { content: ""; position: absolute; width: 72px; aspect-ratio: 1; border-radius: 50%; background: #fff; }
+    .print-pie span { position: relative; z-index: 1; font-size: 22px; font-weight: 900; }
+    .print-pie-legend { display: grid; gap: 7px; }
+    .print-pie-legend div { display: grid; grid-template-columns: 10px 1fr auto; gap: 7px; align-items: center; font-size: 10.5px; color: #475467; }
+    .print-pie-legend i { width: 10px; height: 10px; border-radius: 999px; }
+    .print-pie-legend strong { color: #111827; overflow-wrap: anywhere; }
     table { width: 100%; border-collapse: collapse; font-size: 11px; }
     th, td { border: 1px solid #d9e1ea; padding: 6px; text-align: left; vertical-align: top; }
     th { background: #f1f5f9; text-transform: uppercase; font-size: 10px; }
