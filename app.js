@@ -1187,13 +1187,11 @@ function updateDashboardFromAnalyses() {
   const maxCritical = Math.max(...Object.values(criticalByCompartment), 1);
   riskByComponent = Object.entries(criticalByCompartment)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
     .map(([name, count]) => ({ name, count, value: Math.max(6, Math.round((count / maxCritical) * 100)) }));
 
   priorities = filteredAnalyses
     .filter((item) => item.classificacao === "Critico")
-    .sort((a, b) => (b.data_coleta || "").localeCompare(a.data_coleta || ""))
-    .slice(0, 8);
+    .sort((a, b) => (b.data_coleta || "").localeCompare(a.data_coleta || ""));
 
   const byResult = filteredAnalyses.reduce((summary, item) => {
     summary[item.resultado] = (summary[item.resultado] || 0) + 1;
