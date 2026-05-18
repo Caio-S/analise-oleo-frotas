@@ -20,6 +20,8 @@ let collectionsByDay = [];
 let riskByComponent = [];
 let priorities = [];
 let resultDistribution = [];
+let problemDistribution = [];
+let anomalyFleetDetails = [];
 let analyses = [];
 let filteredAnalyses = [];
 let reportResultDetails = {};
@@ -74,7 +76,7 @@ let fleet = [
 ];
 
 function tagFor(status) {
-  const key = status === "Critico" ? "danger" : status === "Atencao" ? "warning" : "ok";
+  const key = status === "Critico" ? "danger" : status === "Anomalia" ? "warning" : status === "Atencao" ? "warning" : "ok";
   return `<span class="tag ${key}">${status}</span>`;
 }
 
@@ -154,6 +156,61 @@ function renderResultDistribution() {
     .join("");
 }
 
+function renderProblemPie() {
+  const panel = document.querySelector("#problem-pie");
+  if (!problemDistribution.length) {
+    panel.innerHTML = `<div class="empty-state">Sem anomalias ou criticas no periodo.</div>`;
+    return;
+  }
+
+  const total = problemDistribution.reduce((sum, item) => sum + item.count, 0);
+  let cursor = 0;
+  const segments = problemDistribution
+    .map((item) => {
+      const start = cursor;
+      cursor += (item.count / total) * 100;
+      return `${item.color} ${start}% ${cursor}%`;
+    })
+    .join(", ");
+
+  panel.innerHTML = `
+    <div class="pie-chart" style="background: conic-gradient(${segments})">
+      <span>${total}</span>
+    </div>
+    <div class="pie-legend">
+      ${problemDistribution
+        .map(
+          (item) => `
+            <div><i style="background:${item.color}"></i><strong>${item.name}</strong><span>${item.count}</span></div>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderAnomalyFleetDetails() {
+  const list = document.querySelector("#anomaly-fleet-list");
+  if (!anomalyFleetDetails.length) {
+    list.innerHTML = `<div class="empty-state">Sem frotas com anomalia no periodo.</div>`;
+    return;
+  }
+
+  list.innerHTML = anomalyFleetDetails
+    .map(
+      (item) => `
+        <div class="anomaly-fleet-item">
+          <div>
+            <strong>${item.fleet}</strong>
+            <span>${item.count} anomalia(s)</span>
+          </div>
+          <p>${item.anomalies.join("; ")}</p>
+        </div>
+      `
+    )
+    .join("");
+}
+
 function parseCsvLine(line, delimiter) {
   const values = [];
   let current = "";
@@ -216,7 +273,7 @@ function classifyAnalysis(result) {
   const normalized = (result || "").toUpperCase();
   if (normalized.includes("CRITICO") || normalized.includes("CRÍTICO")) return "Critico";
   if (!normalized || normalized === "NORMAL") return "Normal";
-  return "Atencao";
+  return "Anomalia";
 }
 
 function formatDate(dateText) {
@@ -428,7 +485,7 @@ function buildSchedulePrintHtml() {
 function dashboardMetricSnapshot() {
   const total = filteredAnalyses.length;
   const critical = filteredAnalyses.filter((item) => item.classificacao === "Critico").length;
-  const attention = filteredAnalyses.filter((item) => item.classificacao === "Atencao").length;
+  const attention = filteredAnalyses.filter((item) => item.classificacao === "Anomalia").length;
   const uniqueDates = new Set(filteredAnalyses.map((item) => item.data_coleta).filter(Boolean));
   const average = uniqueDates.size ? total / uniqueDates.size : 0;
 
@@ -501,6 +558,33 @@ function buildDashboardPrintHtml() {
         .join("")
     : `<div class="empty">Sem resultados no periodo.</div>`;
 
+  const problemRows = problemDistribution.length
+    ? problemDistribution
+        .map(
+          (item) => `
+            <div class="print-track-row">
+              <div><strong>${escapeHtml(item.name)}</strong><span>${item.count}</span></div>
+              <div class="print-track"><div class="${item.name === "Critico" ? "critico" : "anomalia"}" style="width:${Math.max(8, Math.round((item.count / Math.max(metrics.critical + metrics.attention, 1)) * 100))}%"></div></div>
+            </div>
+          `
+        )
+        .join("")
+    : `<div class="empty">Sem anomalias ou criticas no periodo.</div>`;
+
+  const anomalyFleetRows = anomalyFleetDetails.length
+    ? anomalyFleetDetails
+        .map(
+          (item) => `
+            <tr>
+              <td><strong>${escapeHtml(item.fleet)}</strong></td>
+              <td>${item.count}</td>
+              <td>${escapeHtml(item.anomalies.join("; "))}</td>
+            </tr>
+          `
+        )
+        .join("")
+    : `<tr><td colspan="3">Sem frotas com anomalia no periodo.</td></tr>`;
+
   const priorityRows = priorities.length
     ? priorities
         .map(
@@ -548,8 +632,9 @@ function buildDashboardPrintHtml() {
     .print-track-row div:first-child { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; }
     .print-track { height: 10px; background: #eef2f6; border-radius: 999px; overflow: hidden; }
     .print-track div { height: 100%; background: #dc2626; border-radius: inherit; }
-    .print-track div.atencao { background: #d97706; }
+    .print-track div.atencao, .print-track div.anomalia { background: #d97706; }
     .print-track div.normal { background: #16a34a; }
+    .print-track div.critico { background: #dc2626; }
     table { width: 100%; border-collapse: collapse; font-size: 11px; }
     th, td { border: 1px solid #d9e1ea; padding: 6px; text-align: left; vertical-align: top; }
     th { background: #f1f5f9; text-transform: uppercase; font-size: 10px; }
@@ -585,18 +670,26 @@ function buildDashboardPrintHtml() {
     <section class="metric-grid">
       <article class="metric"><span>Analises no periodo</span><strong>${metrics.total.toLocaleString("pt-BR")}</strong><span>Relatorio CHB filtrado</span></article>
       <article class="metric"><span>Media por dia</span><strong>${metrics.average.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</strong><span>Com base nas datas de coleta</span></article>
-      <article class="metric warning"><span>Analises em atencao</span><strong>${metrics.attention.toLocaleString("pt-BR")}</strong><span>${metrics.attentionRate}% da amostragem</span></article>
+      <article class="metric warning"><span>Anomalias</span><strong>${metrics.attention.toLocaleString("pt-BR")}</strong><span>${metrics.attentionRate}% da amostragem</span></article>
       <article class="metric danger"><span>Criticas abertas</span><strong>${metrics.critical.toLocaleString("pt-BR")}</strong><span>${metrics.criticalRate}% da amostragem</span></article>
     </section>
     <section class="grid">
       <article class="panel wide"><h2>Coletas por dia</h2><div class="bars">${collectionBars}</div></article>
       <article class="panel"><h2>Incidencia critica por compartimento</h2>${riskRows}</article>
       <article class="panel"><h2>Distribuicao dos resultados</h2>${resultRows}</article>
+      <article class="panel"><h2>Problemas por severidade</h2>${problemRows}</article>
       <article class="panel wide">
         <h2>Prioridades da manutencao</h2>
         <table>
           <thead><tr><th>Frota</th><th>Componente</th><th>Ocorrencia</th><th>Coleta</th><th>Status</th></tr></thead>
           <tbody>${priorityRows}</tbody>
+        </table>
+      </article>
+      <article class="panel wide">
+        <h2>Frotas com anomalia</h2>
+        <table>
+          <thead><tr><th>Frota</th><th>Qtd.</th><th>Anomalias encontradas</th></tr></thead>
+          <tbody>${anomalyFleetRows}</tbody>
         </table>
       </article>
     </section>
@@ -865,7 +958,7 @@ function isActionableResult(item) {
 }
 
 function isReportAnomaly(item) {
-  return item.classificacao === "Critico" || item.classificacao === "Atencao";
+  return item.classificacao === "Critico" || item.classificacao === "Anomalia";
 }
 
 function reportResultId(item, index) {
@@ -1136,7 +1229,7 @@ function normalizeAnalysisRecord(record) {
 function renderDashboardMetrics() {
   const total = filteredAnalyses.length;
   const critical = filteredAnalyses.filter((item) => item.classificacao === "Critico").length;
-  const attention = filteredAnalyses.filter((item) => item.classificacao === "Atencao").length;
+  const attention = filteredAnalyses.filter((item) => item.classificacao === "Anomalia").length;
   const uniqueDates = new Set(filteredAnalyses.map((item) => item.data_coleta).filter(Boolean));
   const average = uniqueDates.size ? total / uniqueDates.size : 0;
 
@@ -1194,7 +1287,7 @@ function updateDashboardFromAnalyses() {
     .sort((a, b) => (b.data_coleta || "").localeCompare(a.data_coleta || ""));
 
   const byResult = filteredAnalyses.reduce((summary, item) => {
-    summary[item.resultado] = (summary[item.resultado] || 0) + 1;
+    summary[item.classificacao] = (summary[item.classificacao] || 0) + 1;
     return summary;
   }, {});
   const maxResult = Math.max(...Object.values(byResult), 1);
@@ -1208,11 +1301,44 @@ function updateDashboardFromAnalyses() {
       className: classifyAnalysis(name).toLowerCase(),
     }));
 
+  const problemCounts = filteredAnalyses
+    .filter((item) => item.classificacao !== "Normal")
+    .reduce((summary, item) => {
+      summary[item.classificacao] = (summary[item.classificacao] || 0) + 1;
+      return summary;
+    }, {});
+  problemDistribution = ["Anomalia", "Critico"]
+    .filter((name) => problemCounts[name])
+    .map((name) => ({
+      name,
+      count: problemCounts[name],
+      color: name === "Critico" ? "#dc2626" : "#d97706",
+    }));
+
+  const anomalyByFleet = filteredAnalyses
+    .filter((item) => item.classificacao === "Anomalia")
+    .reduce((summary, item) => {
+      const key = item.cod_frota || "-";
+      if (!summary[key]) summary[key] = { fleet: key, count: 0, anomalies: new Set() };
+      summary[key].count += 1;
+      summary[key].anomalies.add(`${item.compartimento}: ${item.resultado}`);
+      return summary;
+    }, {});
+  anomalyFleetDetails = Object.values(anomalyByFleet)
+    .sort((a, b) => b.count - a.count || String(a.fleet).localeCompare(String(b.fleet)))
+    .map((item) => ({
+      fleet: item.fleet,
+      count: item.count,
+      anomalies: [...item.anomalies],
+    }));
+
   renderDashboardMetrics();
   renderChart();
   renderRisks();
   renderPriorities();
   renderResultDistribution();
+  renderProblemPie();
+  renderAnomalyFleetDetails();
   renderResultsQueue();
 }
 

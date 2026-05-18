@@ -67,7 +67,7 @@
             <small>Com base nas datas de coleta</small>
           </article>
           <article class="metric warning">
-            <span>Analises em atencao</span>
+            <span>Anomalias</span>
             <strong id="metric-attention">0</strong>
             <small id="metric-attention-rate">0% da amostragem</small>
             <button class="metric-action" type="button" data-open-results="Anomalia">Ver anomalias</button>
@@ -149,9 +149,25 @@
           <section class="panel">
             <div class="panel-header">
               <h2>Distribuicao dos resultados</h2>
-              <span>Relatorio atual</span>
+              <span>Normal, anomalia e critico</span>
             </div>
             <div class="risk-list" id="result-distribution"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Problemas por severidade</h2>
+              <span>Sem resultados normais</span>
+            </div>
+            <div class="problem-pie-panel" id="problem-pie"></div>
+          </section>
+
+          <section class="panel wide">
+            <div class="panel-header">
+              <h2>Frotas com anomalia</h2>
+              <span>Quais anomalias foram encontradas</span>
+            </div>
+            <div class="anomaly-fleet-list" id="anomaly-fleet-list"></div>
           </section>
         </div>
       </section>
