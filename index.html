@@ -245,6 +245,7 @@
             <button class="secondary-button" id="today-period" type="button">Hoje</button>
             <button class="secondary-button" id="next-period" type="button">Proximo</button>
             <button class="primary-button" id="print-schedule" type="button">Gerar PDF</button>
+            <button class="danger-button admin-only" id="clear-all-schedule" type="button">Excluir toda programacao</button>
           </div>
           <span class="storage-status" id="schedule-db-status">Banco de dados: carregando...</span>
         </section>
@@ -358,7 +359,10 @@
             <label><input type="checkbox" value="6" />Sab</label>
           </div>
           <div class="batch-preview" id="batch-preview">Previa da distribuicao aparecera aqui.</div>
-          <button class="primary-button" type="submit">Distribuir programacao</button>
+          <button class="primary-button" id="batch-submit-btn" type="submit">
+            <span id="batch-btn-label">Distribuir programacao</span>
+            <span id="batch-btn-spinner" class="btn-spinner" hidden aria-hidden="true"></span>
+          </button>
         </form>
       </dialog>
 
