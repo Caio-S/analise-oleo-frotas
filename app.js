@@ -1842,6 +1842,42 @@ document.querySelector("#next-period").addEventListener("click", () => {
 
 document.querySelector("#print-schedule").addEventListener("click", openSchedulePrintReport);
 
+// --- Excluir toda a programacao (admin only) ---
+document.querySelector("#clear-all-schedule").addEventListener("click", async () => {
+  const total = scheduleItems.length;
+  if (!total) {
+    alert("Nenhuma programacao para excluir.");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Tem certeza que deseja excluir TODA a programacao?\n\n${total} servico(s) serao removidos permanentemente do banco de dados.\n\nEsta acao nao pode ser desfeita.`
+  );
+  if (!confirmed) return;
+
+  const btn = document.querySelector("#clear-all-schedule");
+  btn.disabled = true;
+  btn.textContent = "Excluindo...";
+  setScheduleStorageStatus("Excluindo toda a programacao...");
+
+  try {
+    if (scheduleDbEnabled && supabaseClient) {
+      const { error } = await supabaseClient.from("programacao_coletas").delete().neq("id", 0);
+      if (error) throw error;
+    }
+    scheduleItems.splice(0, scheduleItems.length);
+    nextScheduleId = 1;
+    setScheduleStorageStatus("Programacao excluida com sucesso.");
+    renderSchedule();
+    renderResultsQueue();
+  } catch (error) {
+    setScheduleStorageStatus(`Erro ao excluir programacao: ${explainScheduleError(error)}`, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Excluir toda programacao";
+  }
+});
+
 document.querySelector("#schedule-add-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = document.querySelector("#schedule-add-message");
@@ -1922,6 +1958,16 @@ document.querySelector("#batch-schedule-form").addEventListener("submit", async 
   }
 
   const distribution = distributeFleetsAcrossWeekdays(fleets, startDate, endDate, weekdays);
+
+  // Estado de carregamento: desabilitar botao e mostrar spinner
+  const submitBtn = document.querySelector("#batch-submit-btn");
+  const btnLabel = document.querySelector("#batch-btn-label");
+  const btnSpinner = document.querySelector("#batch-btn-spinner");
+  submitBtn.disabled = true;
+  btnLabel.textContent = `Agendando ${fleets.length} frota(s)...`;
+  btnSpinner.hidden = false;
+  message.textContent = "Gravando no banco de dados...";
+
   try {
     for (const entry of distribution) {
       const item = {
@@ -1937,6 +1983,9 @@ document.querySelector("#batch-schedule-form").addEventListener("submit", async 
     }
   } catch (error) {
     message.textContent = `Erro ao gravar programacao: ${explainScheduleError(error)}`;
+    submitBtn.disabled = false;
+    btnLabel.textContent = "Distribuir programacao";
+    btnSpinner.hidden = true;
     return;
   }
 
@@ -1946,6 +1995,9 @@ document.querySelector("#batch-schedule-form").addEventListener("submit", async 
   document.querySelector("#schedule-compartment").value = compartment;
   event.target.reset();
   document.querySelector("#batch-compartment").value = compartment;
+  submitBtn.disabled = false;
+  btnLabel.textContent = "Distribuir programacao";
+  btnSpinner.hidden = true;
   document.querySelector("#batch-modal").close();
   renderSchedule();
 });
