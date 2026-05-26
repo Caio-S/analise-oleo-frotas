@@ -1545,6 +1545,11 @@ function recordsFromWorkbook(workbook) {
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
 
+  const headers = rows[0] || [];
+  const observacaoIdx = headers.findIndex((h) =>
+    String(h).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().includes("observa")
+  );
+
   return rows
     .slice(1)
     .filter((row) => row[1])
@@ -1555,7 +1560,7 @@ function recordsFromWorkbook(workbook) {
         compartimento: String(row[6] || "").trim(),
         data_coleta: normalizeExcelDate(row[12]),
         resultado: String(row[73] || "SEM RESULTADO").trim(),
-        resultado_laudo: String(row[18] || "").trim(),
+        resultado_laudo: String(row[observacaoIdx >= 0 ? observacaoIdx : 18] || "").trim(),
       })
     );
 }
