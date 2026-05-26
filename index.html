@@ -269,6 +269,7 @@
             </label>
             <button class="primary-button" type="submit">Agendar</button>
             <button class="secondary-button" id="open-batch-modal" type="button">Programar lote</button>
+            <button class="danger-button admin-only" id="clear-all-schedule" type="button">Excluir toda programacao</button>
           </form>
         </section>
 
@@ -358,7 +359,10 @@
             <label><input type="checkbox" value="6" />Sab</label>
           </div>
           <div class="batch-preview" id="batch-preview">Previa da distribuicao aparecera aqui.</div>
-          <button class="primary-button" type="submit">Distribuir programacao</button>
+          <button class="primary-button" id="batch-submit-btn" type="submit">
+            <span id="batch-btn-label">Distribuir programacao</span>
+            <span id="batch-btn-spinner" hidden> Aguarde...</span>
+          </button>
         </form>
       </dialog>
 
