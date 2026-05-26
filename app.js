@@ -125,15 +125,18 @@ function renderPriorities() {
 
   table.innerHTML = priorities
     .map(
-      (row) => `
+      (row) => {
+        const achado = row.resultado_laudo || row.resultado || "-";
+        return `
         <tr>
           <td><strong>${row.cod_frota}</strong></td>
           <td>${row.compartimento}</td>
-          <td>${row.resultado}</td>
+          <td style="max-width:260px;white-space:normal;line-height:1.4">${escapeHtml(achado)}</td>
           <td>${formatDate(row.data_coleta)}</td>
           <td>${tagFor(row.classificacao)}</td>
         </tr>
-      `
+      `;
+      }
     )
     .join("");
 }
@@ -604,17 +607,19 @@ function buildDashboardPrintHtml() {
 
   const priorityRows = priorities.length
     ? priorities
-        .slice(0, 12)
         .map(
-          (row) => `
+          (row) => {
+            const achado = row.resultado_laudo || row.resultado || "-";
+            return `
             <tr>
-              <td><strong>${escapeHtml(row.cod_frota)}</strong></td>
+              <td style="font-weight:bold">${escapeHtml(row.cod_frota)}</td>
               <td>${escapeHtml(row.compartimento)}</td>
-              <td>${escapeHtml(row.resultado)}</td>
+              <td style="max-width:220px;white-space:normal;line-height:1.4">${escapeHtml(achado)}</td>
               <td>${formatDate(row.data_coleta)}</td>
               <td>${escapeHtml(row.classificacao)}</td>
             </tr>
-          `
+          `;
+          }
         )
         .join("")
     : `<tr><td colspan="5">Sem analises criticas no periodo.</td></tr>`;
@@ -703,7 +708,7 @@ function buildDashboardPrintHtml() {
       <article class="panel wide">
         <h2>Prioridades da manutencao</h2>
         <table>
-          <thead><tr><th>Frota</th><th>Componente</th><th>Ocorrencia</th><th>Coleta</th><th>Status</th></tr></thead>
+          <thead><tr><th>Frota</th><th>Componente</th><th>O que foi encontrado</th><th>Coleta</th><th>Classificacao</th></tr></thead>
           <tbody>${priorityRows}</tbody>
         </table>
       </article>
@@ -1238,13 +1243,20 @@ async function deleteScheduleItem(item) {
 
 function normalizeAnalysisRecord(record) {
   const resultado = (record.resultado || "SEM RESULTADO").trim();
+  // resultado_laudo: texto descritivo do achado (ex: "Agua no oleo", "Viscosidade fora")
+  // pode vir de campo separado no CSV/Excel ou ser o proprio resultado quando nao for apenas a classificacao
+  const classificacao = classifyAnalysis(resultado);
+  const isOnlyClassification = ["CRITICO", "CRÍTICO", "ANOMALIA", "NORMAL", "SEM RESULTADO"].includes(resultado.toUpperCase());
+  const resultado_laudo = (record.resultado_laudo || "").trim()
+    || (isOnlyClassification ? "" : resultado);
   return {
     cod_frota: record.cod_frota || "-",
     cod_compartimento: record.cod_compartimento || "-",
     compartimento: record.compartimento || "Sem compartimento",
     data_coleta: record.data_coleta || "",
     resultado,
-    classificacao: classifyAnalysis(resultado),
+    resultado_laudo,
+    classificacao,
   };
 }
 
@@ -1543,6 +1555,7 @@ function recordsFromWorkbook(workbook) {
         compartimento: String(row[6] || "").trim(),
         data_coleta: normalizeExcelDate(row[12]),
         resultado: String(row[73] || "SEM RESULTADO").trim(),
+        resultado_laudo: String(row[18] || "").trim(),
       })
     );
 }
@@ -2008,6 +2021,33 @@ document.querySelector("#modal-task-list").addEventListener("click", async (even
 
 document.querySelector("#close-service-modal").addEventListener("click", () => {
   document.querySelector("#service-modal").close();
+});
+
+document.querySelector("#delete-service-button").addEventListener("click", async () => {
+  if (currentUserRole !== "admin") return;
+  const item = scheduleItems.find((entry) => entry.id === selectedServiceId);
+  if (!item) return;
+
+  const statusMessage = document.querySelector("#service-save-status");
+  statusMessage.textContent = "Excluindo...";
+  statusMessage.classList.remove("error");
+
+  try {
+    await deleteScheduleItem(item);
+    const index = scheduleItems.indexOf(item);
+    if (index >= 0) scheduleItems.splice(index, 1);
+  } catch (error) {
+    statusMessage.textContent = `Erro ao excluir: ${explainScheduleError(error)}`;
+    statusMessage.classList.add("error");
+    return;
+  }
+
+  document.querySelector("#service-modal").close();
+  renderSchedule();
+  renderResultsQueue();
+  if (selectedScheduleDate && document.querySelector("#schedule-modal").open) {
+    openScheduleModal(selectedScheduleDate);
+  }
 });
 
 document.querySelector("#service-modal").addEventListener("click", (event) => {
