@@ -1655,11 +1655,30 @@ textarea {
   color: var(--muted);
 }
 
-.residency-body {
+.residency-count-badge {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--danger);
+  background: #fee2e2;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.streak-dates-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.streak-date {
+  font-size: 11px;
+  color: var(--muted);
+  background: #f1f5f9;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 6px;
 }
 
 .streak-dots {
@@ -1684,21 +1703,6 @@ textarea {
   margin-left: 4px;
 }
 
-.residency-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  font-size: 12px;
-  color: var(--muted);
-  text-align: right;
-  white-space: nowrap;
-}
-
-.residency-meta strong {
-  font-size: 13px;
-  color: var(--danger);
-}
 
 @media (max-width: 620px) {
   .topbar {

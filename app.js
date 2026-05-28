@@ -241,26 +241,23 @@ function renderCriticalResidency() {
 
   list.innerHTML = criticalResidencyData
     .map((item) => {
-      const dotCount = Math.min(item.streak, 10);
-      const dotsHtml = Array.from({ length: dotCount }, () => `<span class="streak-dot"></span>`).join("");
+      const visibleDates = item.streakDates.slice(0, 10);
+      const dotsHtml = visibleDates
+        .map((d) => `<span class="streak-dot" title="${formatDate(d)}"></span>`)
+        .join("");
       const extraDots = item.streak > 10 ? `<span class="streak-more">+${item.streak - 10}</span>` : "";
-      const sinceText =
-        item.firstStreakDate && item.firstStreakDate !== item.lastDate
-          ? `De ${formatDate(item.firstStreakDate)} ate ${formatDate(item.lastDate)}`
-          : `Ultima coleta: ${formatDate(item.lastDate)}`;
+      const datesHtml = item.streakDates
+        .map((d) => `<span class="streak-date">${formatDate(d)}</span>`)
+        .join("");
       return `
         <div class="residency-item">
           <div class="residency-header">
             <strong>${escapeHtml(item.cod_frota)}</strong>
             <span>${escapeHtml(item.compartimento)}</span>
+            <span class="residency-count-badge">${item.streak}x critico</span>
           </div>
-          <div class="residency-body">
-            <div class="streak-dots">${dotsHtml}${extraDots}</div>
-            <div class="residency-meta">
-              <strong>${item.streak} coleta${item.streak > 1 ? "s" : ""} critica${item.streak > 1 ? "s" : ""}</strong>
-              <span>${sinceText}</span>
-            </div>
-          </div>
+          <div class="streak-dots">${dotsHtml}${extraDots}</div>
+          <div class="streak-dates-row">${datesHtml}</div>
         </div>
       `;
     })
@@ -1446,10 +1443,12 @@ function updateDashboardFromAnalyses() {
         if (record.classificacao === "Critico") streak++;
         else break;
       }
+      const streakDates = sorted.slice(0, streak).map((r) => r.data_coleta).filter(Boolean);
       return {
         cod_frota: group.cod_frota,
         compartimento: group.compartimento,
         streak,
+        streakDates,
         lastDate: sorted[0]?.data_coleta || "",
         firstStreakDate: streak > 0 ? (sorted[streak - 1]?.data_coleta || "") : "",
       };
