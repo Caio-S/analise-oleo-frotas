@@ -241,14 +241,25 @@ function renderCriticalResidency() {
 
   list.innerHTML = criticalResidencyData
     .map((item) => {
-      const visibleDates = item.streakDates.slice(0, 10);
-      const dotsHtml = visibleDates
-        .map((d) => `<span class="streak-dot" title="${formatDate(d)}"></span>`)
+      const visibleRecords = item.streakRecords.slice(0, 10);
+      const dotsHtml = visibleRecords
+        .map((r) => `<span class="streak-dot" title="${formatDate(r.date)}"></span>`)
         .join("");
       const extraDots = item.streak > 10 ? `<span class="streak-more">+${item.streak - 10}</span>` : "";
-      const datesHtml = item.streakDates
-        .map((d) => `<span class="streak-date">${formatDate(d)}</span>`)
+
+      const rowsHtml = item.streakRecords
+        .map((r) => {
+          const laudo = r.laudo && !["CRITICO", "CRÍTICO", "SEM RESULTADO"].includes(r.laudo.toUpperCase())
+            ? escapeHtml(r.laudo)
+            : "";
+          return `
+            <div class="streak-row">
+              <span class="streak-date">${formatDate(r.date)}</span>
+              ${laudo ? `<span class="streak-laudo">${laudo}</span>` : ""}
+            </div>`;
+        })
         .join("");
+
       return `
         <div class="residency-item">
           <div class="residency-header">
@@ -257,7 +268,7 @@ function renderCriticalResidency() {
             <span class="residency-count-badge">${item.streak}x critico</span>
           </div>
           <div class="streak-dots">${dotsHtml}${extraDots}</div>
-          <div class="streak-dates-row">${datesHtml}</div>
+          <div class="streak-rows">${rowsHtml}</div>
         </div>
       `;
     })
@@ -1443,12 +1454,15 @@ function updateDashboardFromAnalyses() {
         if (record.classificacao === "Critico") streak++;
         else break;
       }
-      const streakDates = sorted.slice(0, streak).map((r) => r.data_coleta).filter(Boolean);
+      const streakRecords = sorted.slice(0, streak).map((r) => ({
+        date: r.data_coleta || "",
+        laudo: r.resultado_laudo || r.resultado || "",
+      })).filter((r) => r.date);
       return {
         cod_frota: group.cod_frota,
         compartimento: group.compartimento,
         streak,
-        streakDates,
+        streakRecords,
         lastDate: sorted[0]?.data_coleta || "",
         firstStreakDate: streak > 0 ? (sorted[streak - 1]?.data_coleta || "") : "",
       };
@@ -1576,6 +1590,7 @@ function compactAnalysisRows(rows) {
     compartimento: row.compartimento || "",
     data_coleta: row.data_coleta || "",
     resultado: row.resultado || "SEM RESULTADO",
+    resultado_laudo: row.resultado_laudo || "",
     classificacao: row.classificacao || classifyAnalysis(row.resultado),
   }));
 }
