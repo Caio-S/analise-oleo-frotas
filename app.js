@@ -3,6 +3,7 @@ const pageTitles = {
   fleet: "Base de frotas",
   collections: "Programacao de coletas",
   results: "Resultados das analises",
+  residency: "Reincidencias criticas",
 };
 
 const supabaseUrl = "https://xgfxsvvypffmibyuhdrd.supabase.co";
@@ -23,6 +24,7 @@ let resultDistribution = [];
 let anomalyCompartmentDistribution = [];
 let anomalyTypeDistribution = [];
 let anomalyFleetDetails = [];
+let criticalResidencyData = [];
 let analyses = [];
 let filteredAnalyses = [];
 let reportResultDetails = {};
@@ -217,6 +219,51 @@ function renderAnomalyFleetDetails() {
         </div>
       `
     )
+    .join("");
+}
+
+function renderCriticalResidency() {
+  const list = document.querySelector("#critical-residency-list");
+  if (!list) return;
+
+  const countEl = document.querySelector("#residency-count");
+  const maxEl = document.querySelector("#residency-max-streak");
+  const maxDetailEl = document.querySelector("#residency-max-detail");
+  if (countEl) countEl.textContent = criticalResidencyData.length;
+  const maxStreak = criticalResidencyData[0]?.streak ?? 0;
+  if (maxEl) maxEl.textContent = maxStreak;
+  if (maxDetailEl) maxDetailEl.textContent = maxStreak > 0 ? `frota ${criticalResidencyData[0].cod_frota} – ${criticalResidencyData[0].compartimento}` : "sem reincidencias";
+
+  if (!criticalResidencyData.length) {
+    list.innerHTML = `<div class="empty-state">Nenhuma frota com critico consecutivo no periodo.</div>`;
+    return;
+  }
+
+  list.innerHTML = criticalResidencyData
+    .map((item) => {
+      const dotCount = Math.min(item.streak, 10);
+      const dotsHtml = Array.from({ length: dotCount }, () => `<span class="streak-dot"></span>`).join("");
+      const extraDots = item.streak > 10 ? `<span class="streak-more">+${item.streak - 10}</span>` : "";
+      const sinceText =
+        item.firstStreakDate && item.firstStreakDate !== item.lastDate
+          ? `De ${formatDate(item.firstStreakDate)} ate ${formatDate(item.lastDate)}`
+          : `Ultima coleta: ${formatDate(item.lastDate)}`;
+      return `
+        <div class="residency-item">
+          <div class="residency-header">
+            <strong>${escapeHtml(item.cod_frota)}</strong>
+            <span>${escapeHtml(item.compartimento)}</span>
+          </div>
+          <div class="residency-body">
+            <div class="streak-dots">${dotsHtml}${extraDots}</div>
+            <div class="residency-meta">
+              <strong>${item.streak} coleta${item.streak > 1 ? "s" : ""} critica${item.streak > 1 ? "s" : ""}</strong>
+              <span>${sinceText}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    })
     .join("");
 }
 
@@ -1381,6 +1428,35 @@ function updateDashboardFromAnalyses() {
         })),
     }));
 
+  const byFleetComp = {};
+  filteredAnalyses.forEach((item) => {
+    const key = `${item.cod_frota}||${item.compartimento}`;
+    if (!byFleetComp[key]) {
+      byFleetComp[key] = { cod_frota: item.cod_frota, compartimento: item.compartimento, records: [] };
+    }
+    byFleetComp[key].records.push(item);
+  });
+  criticalResidencyData = Object.values(byFleetComp)
+    .map((group) => {
+      const sorted = [...group.records].sort((a, b) =>
+        (b.data_coleta || "").localeCompare(a.data_coleta || "")
+      );
+      let streak = 0;
+      for (const record of sorted) {
+        if (record.classificacao === "Critico") streak++;
+        else break;
+      }
+      return {
+        cod_frota: group.cod_frota,
+        compartimento: group.compartimento,
+        streak,
+        lastDate: sorted[0]?.data_coleta || "",
+        firstStreakDate: streak > 0 ? (sorted[streak - 1]?.data_coleta || "") : "",
+      };
+    })
+    .filter((item) => item.streak >= 2)
+    .sort((a, b) => b.streak - a.streak || (b.lastDate).localeCompare(a.lastDate));
+
   renderDashboardMetrics();
   renderChart();
   renderRisks();
@@ -1388,6 +1464,7 @@ function updateDashboardFromAnalyses() {
   renderResultDistribution();
   renderProblemPies();
   renderAnomalyFleetDetails();
+  renderCriticalResidency();
   renderResultsQueue();
 }
 

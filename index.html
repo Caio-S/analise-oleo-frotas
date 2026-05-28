@@ -21,6 +21,7 @@
         <button class="nav-item" data-view="fleet">Frota</button>
         <button class="nav-item" data-view="collections">Programacao</button>
         <button class="nav-item" data-view="results">Resultados</button>
+        <button class="nav-item" data-view="residency">Reincidencias</button>
       </nav>
     </aside>
 
@@ -177,7 +178,31 @@
             </div>
             <div class="anomaly-fleet-list" id="anomaly-fleet-list"></div>
           </section>
+
         </div>
+      </section>
+
+      <section class="view" id="residency">
+        <div class="metric-grid">
+          <article class="metric danger">
+            <span>Frotas em reincidencia</span>
+            <strong id="residency-count">0</strong>
+            <small>Critico consecutivo no periodo</small>
+          </article>
+          <article class="metric danger">
+            <span>Maior sequencia</span>
+            <strong id="residency-max-streak">0</strong>
+            <small id="residency-max-detail">coletas criticas</small>
+          </article>
+        </div>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Frotas com critico consecutivo</h2>
+            <span>Baseado no relatorio CHB atual</span>
+          </div>
+          <div class="residency-list" id="critical-residency-list"></div>
+        </section>
       </section>
 
       <section class="view" id="fleet">

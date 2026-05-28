@@ -1625,6 +1625,81 @@ textarea {
   }
 }
 
+.residency-list {
+  display: grid;
+  gap: 10px;
+}
+
+.residency-item {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--danger);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  background: #fff9f9;
+}
+
+.residency-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.residency-header strong {
+  font-size: 15px;
+}
+
+.residency-header span {
+  color: var(--muted);
+}
+
+.residency-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.streak-dots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.streak-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--danger);
+  display: inline-block;
+}
+
+.streak-more {
+  font-size: 12px;
+  color: var(--danger);
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.residency-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.residency-meta strong {
+  font-size: 13px;
+  color: var(--danger);
+}
+
 @media (max-width: 620px) {
   .topbar {
     align-items: stretch;
