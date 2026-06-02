@@ -460,7 +460,7 @@ function filterScheduleItems(items) {
   return items.filter((item) => `${item.fleet} ${item.compartment}`.toLowerCase().includes(term));
 }
 
-function buildSchedulePrintHtml() {
+function buildScheduleTablePrintHtml() {
   const { start, end } = getVisibleScheduleRange();
   const period = `${formatDate(start)} a ${formatDate(end)}`;
   const generatedAt = new Date().toLocaleString("pt-BR");
@@ -542,6 +542,342 @@ function buildSchedulePrintHtml() {
       <tbody>${tableRows}</tbody>
     </table>
   </div>
+</body>
+</html>`;
+}
+
+function buildScheduleAdherencePrintHtml() {
+  const { start, end } = getVisibleScheduleRange();
+  const period = `${formatDate(start)} a ${formatDate(end)}`;
+  const safePeriod = period.replace(/\//g, "-").replace(/ /g, "");
+  const generatedAt = new Date().toLocaleString("pt-BR");
+  const items = getVisibleScheduleItems();
+
+  let tRealizado = 0, tNaoRealizado = 0;
+  let tBase = 0, tCampo = 0, tGarantia = 0;
+  let rNormal = 0, rAnomalia = 0, rCritico = 0;
+  const laudosPorEsp = {};
+  const byEspNaoRealizado = {};
+  const campoByEsp = {};
+  const byEspPendente = {};
+
+  items.forEach((item) => {
+    const status = serviceStatus(item);
+    if (status === "Quebrada") return;
+    const info = getFleetInfo(item.fleet);
+    const esp = info.especialidade !== "-" ? info.especialidade.toUpperCase() : "GERAL";
+    let loc = "BASE";
+    if (item.location) {
+      const l = item.location.toUpperCase();
+      if (l.includes("CAMPO")) loc = "CAMPO";
+      else if (l.includes("TERCEIRO")) loc = "GARANTIA";
+    }
+    const res = (item.result || "").toUpperCase().trim();
+    if (!laudosPorEsp[esp]) {
+      laudosPorEsp[esp] = { normal: 0, anomalia: 0, critico: 0 };
+      byEspNaoRealizado[esp] = 0;
+      campoByEsp[esp] = 0;
+      byEspPendente[esp] = 0;
+    }
+    if (status === "Realizada") {
+      tRealizado++;
+      if (loc === "CAMPO") { tCampo++; campoByEsp[esp]++; }
+      else if (loc === "GARANTIA") tGarantia++;
+      else tBase++;
+      if (res === "ANOMALIA") { rAnomalia++; laudosPorEsp[esp].anomalia++; }
+      else if (res === "CRITICO" || res === "CRÍTICO") { rCritico++; laudosPorEsp[esp].critico++; }
+      else if (res === "NORMAL") { rNormal++; laudosPorEsp[esp].normal++; }
+    } else {
+      tNaoRealizado++;
+      byEspNaoRealizado[esp]++;
+      byEspPendente[esp]++;
+    }
+  });
+
+  const tProgramado = tRealizado + tNaoRealizado;
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Aderência - Análise de Óleo</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"><\/script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"><\/script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #525659; display: flex; justify-content: center; padding: 20px; margin: 0; }
+    #relatorioCompleto { width: 794px; height: 1123px; background-color: #fff; padding: 20px 25px; box-sizing: border-box; position: relative; box-shadow: 0 0 15px rgba(0,0,0,0.5); display: flex; flex-direction: column; }
+    .header-top { background-color: #0d6efd; color: white; padding: 8px 15px; border-bottom: 3px solid black; }
+    .box-title { background-color: #404454; color: white; text-align: center; padding: 4px; font-weight: bold; font-size: 11px; margin-bottom: 0; text-transform: uppercase; }
+    .dash-box { border: 2px solid #000; height: 100%; display: flex; flex-direction: column; background: #fff; overflow: hidden; }
+    .box-content { padding: 10px; flex-grow: 1; display: flex; flex-direction: column; justify-content: center; }
+    .chart-center-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 30px; font-weight: bold; color: #000; z-index: 3; pointer-events: none; }
+    .info-box { border: 1px solid #ccc; padding: 8px; border-radius: 5px; text-align: center; display: flex; flex-direction: column; justify-content: center; box-shadow: inset 0 0 5px rgba(0,0,0,0.15); }
+    .btn-print-bar { position: fixed; top: 20px; right: 20px; z-index: 1000; }
+    .canvas-container { position: relative; width: 100%; display: flex; justify-content: center; align-items: center; }
+    @media print {
+      body { background-color: #fff; padding: 0; }
+      #relatorioCompleto { box-shadow: none; width: 100%; height: 100%; page-break-inside: avoid; border: none; margin: 0; }
+      .btn-print-bar { display: none !important; }
+      @page { size: portrait; margin: 0; }
+    }
+  </style>
+</head>
+<body>
+  <button class="btn btn-primary btn-lg btn-print-bar fw-bold shadow" onclick="gerarPDF()">
+    <i class="bi bi-file-pdf-fill me-1"></i> Baixar Relatório Oficial (A4)
+  </button>
+
+  <div id="relatorioCompleto">
+    <div class="header-top d-flex justify-content-between align-items-center mb-3">
+      <h5 class="mb-0 fw-bold" style="font-size: 16px;"><i class="bi bi-eyedropper me-2"></i>ACOMPANHAMENTO - ANÁLISES DE ÓLEO</h5>
+      <div class="text-end" style="line-height: 1.2;">
+        <span class="fw-bold d-block" style="font-size: 14px;">CRV INDUSTRIAL</span>
+        <span style="font-size: 11px;">Período: ${escapeHtml(period)}</span><br>
+        <span style="font-size: 10px;">ATUALIZADO AS: ${escapeHtml(generatedAt)}</span>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3" style="height: 250px;">
+      <div class="col-6">
+        <div class="dash-box">
+          <div class="box-title">RESULTADOS DA PROGRAMAÇÃO</div>
+          <div class="box-content">
+            <div style="font-size: 10px; line-height: 1.4; text-align: center; border-bottom: 1px dashed #ccc; padding-bottom: 5px; margin-bottom: 8px;">
+              <span class="text-dark fw-bold">Programado:</span> O planejado. |
+              <span style="color: #00b050;" class="fw-bold">Realizado:</span> O feito. |
+              <span style="color: #ff0000;" class="fw-bold">Não Realizado:</span> A falha.
+            </div>
+            <div class="canvas-container" style="height: 155px;">
+              <canvas id="chartProg" style="position: relative; z-index: 2;"></canvas>
+              <div class="chart-center-text">${tProgramado}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6">
+        <div class="dash-box" style="border-color: #0dcaf0;">
+          <div class="box-title" style="background-color: #0dcaf0; color: #000;">RESULTADOS DOS LAUDOS (REALIZADOS)</div>
+          <div class="box-content">
+            <div style="font-size: 10px; line-height: 1.4; text-align: center; border-bottom: 1px dashed #ccc; padding-bottom: 5px; margin-bottom: 8px;">
+              <span style="color: #198754" class="fw-bold">Normal:</span> Bom. |
+              <span style="color: #ffc107" class="fw-bold">Anomalia:</span> Atenção. |
+              <span style="color: #dc3545" class="fw-bold">Crítico:</span> Bloqueia a Frota.
+            </div>
+            <div class="canvas-container" style="height: 155px;">
+              <canvas id="chartLaudos" style="position: relative; z-index: 2;"></canvas>
+              <div class="chart-center-text">${tRealizado}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3" style="height: 220px;">
+      <div class="col-12">
+        <div class="dash-box">
+          <div class="box-title">RESULTADOS DOS LAUDOS POR ESPECIALIDADE</div>
+          <div class="box-content">
+            <div class="canvas-container" style="height: 170px;">
+              <canvas id="chartEspecialidadeLaudos"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3" style="height: 180px;">
+      <div class="col-6">
+        <div class="dash-box">
+          <div class="box-title">COLETAS POR LOCAL - CAMPO</div>
+          <div class="box-content d-flex flex-row align-items-center p-2">
+            <div class="canvas-container" style="height: 130px; flex-grow: 1;">
+              <canvas id="chartCampo"></canvas>
+            </div>
+            <div class="ms-2" style="width: 100px; height: 100%;">
+              <div class="info-box text-white h-100" style="background-color: #0d6efd; border-color: #0d6efd;">
+                <span class="fw-bold" style="font-size: 9px;">FROTAS<br>COLETADAS</span>
+                <span class="fw-bold fs-2 my-1">${tCampo}</span>
+                <span class="fw-bold" style="font-size: 9px;">NO CAMPO</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6">
+        <div class="dash-box">
+          <div class="box-title">ANÁLISES - POR LOCAL GERAL</div>
+          <div class="box-content d-flex flex-row align-items-center p-2">
+            <div class="canvas-container" style="height: 130px; flex-grow: 1;">
+              <canvas id="chartLocais"></canvas>
+            </div>
+            <div class="ms-2" style="width: 100px; height: 100%;">
+              <div class="info-box text-dark h-100" style="background-color: #0dcaf0; border-color: #0dcaf0;">
+                <span class="fw-bold" style="font-size: 9px;">TOTAL DE</span>
+                <span class="fw-bold fs-2 my-1">${tRealizado}</span>
+                <span class="fw-bold" style="font-size: 8px;">FROTAS REALIZADAS</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3" style="flex-grow: 1; min-height: 250px;">
+      <div class="col-12">
+        <div class="dash-box">
+          <div class="box-title">MONITORAMENTO DE ANÁLISES NÃO REALIZADAS POR ESPECIALIDADE</div>
+          <div class="box-content d-flex flex-row align-items-center p-2">
+            <div class="canvas-container" style="height: 200px; flex-grow: 1; padding-right: 10px;">
+              <canvas id="chartNaoRealizadasMotivos"></canvas>
+            </div>
+            <div style="width: 130px; height: 100%;">
+              <div class="info-box text-white h-100 py-3 d-flex justify-content-center" style="background-color: #ff0000; border-color: #ff0000;">
+                <span class="fw-bold" style="font-size: 10px;">ANÁLISES<br>FALHAS</span>
+                <span class="fw-bold my-2" style="font-size: 45px; line-height: 1;">${tNaoRealizado}</span>
+                <span class="fw-bold" style="font-size: 10px;"><i class="bi bi-exclamation-triangle-fill me-1"></i>Atenção</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const _laudosPorEsp = ${JSON.stringify(laudosPorEsp)};
+    const _byEspNaoRealizado = ${JSON.stringify(byEspNaoRealizado)};
+    const _campoByEsp = ${JSON.stringify(campoByEsp)};
+    const _byEspPendente = ${JSON.stringify(byEspPendente)};
+    const _tBase = ${tBase}, _tCampo = ${tCampo}, _tGarantia = ${tGarantia};
+    const _rNormal = ${rNormal}, _rAnomalia = ${rAnomalia}, _rCritico = ${rCritico};
+    const _tRealizado = ${tRealizado}, _tNaoRealizado = ${tNaoRealizado};
+
+    Chart.register(ChartDataLabels);
+    Chart.defaults.set('plugins.datalabels', { color: '#fff', font: { weight: 'bold', size: 12 }, formatter: (v) => v > 0 ? v : '' });
+
+    const progLabels = [], progData = [], progColors = [];
+    if (_tRealizado > 0) { progLabels.push('Realizado'); progData.push(_tRealizado); progColors.push('#00b050'); }
+    if (_tNaoRealizado > 0) { progLabels.push('Não Realizado'); progData.push(_tNaoRealizado); progColors.push('#ff0000'); }
+    if (!progData.length) { progLabels.push('Sem Dados'); progData.push(1); progColors.push('#ccc'); }
+    new Chart(document.getElementById('chartProg'), {
+      type: 'doughnut',
+      data: { labels: progLabels, datasets: [{ data: progData, backgroundColor: progColors, borderWidth: progData.length > 1 ? 2 : 0, borderColor: '#fff' }] },
+      options: {
+        maintainAspectRatio: false, cutout: '64%', layout: { padding: 32 },
+        plugins: {
+          legend: { display: false },
+          datalabels: {
+            backgroundColor: (ctx) => ctx.dataset.backgroundColor[ctx.dataIndex],
+            borderRadius: 4, padding: 6, color: '#fff', font: { weight: 'bold', size: 11 }, anchor: 'end', align: 'end', offset: 4, clamp: true,
+            formatter: (val, ctx) => {
+              if (progLabels[0] === 'Sem Dados') return '';
+              const sum = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+              return val > 0 ? val + '; ' + (sum > 0 ? Math.round((val / sum) * 100) : 0) + '%' : '';
+            }
+          }
+        }
+      }
+    });
+
+    const laudosLabels = [], laudosData = [], laudosColors = [];
+    if (_rNormal > 0) { laudosLabels.push('Normal'); laudosData.push(_rNormal); laudosColors.push('#198754'); }
+    if (_rAnomalia > 0) { laudosLabels.push('Anomalia'); laudosData.push(_rAnomalia); laudosColors.push('#ffc107'); }
+    if (_rCritico > 0) { laudosLabels.push('Crítico'); laudosData.push(_rCritico); laudosColors.push('#dc3545'); }
+    if (!laudosData.length) { laudosLabels.push('Sem Dados'); laudosData.push(1); laudosColors.push('#ccc'); }
+    new Chart(document.getElementById('chartLaudos'), {
+      type: 'doughnut',
+      data: { labels: laudosLabels, datasets: [{ data: laudosData, backgroundColor: laudosColors, borderWidth: laudosData.length > 1 ? 2 : 0, borderColor: '#fff' }] },
+      options: {
+        maintainAspectRatio: false, cutout: '64%', layout: { padding: 32 },
+        plugins: {
+          legend: { display: false },
+          datalabels: {
+            backgroundColor: (ctx) => ctx.dataset.backgroundColor[ctx.dataIndex],
+            borderRadius: 4, padding: 5,
+            color: (ctx) => ctx.chart.data.labels[ctx.dataIndex] === 'Anomalia' ? '#000' : '#fff',
+            font: { weight: 'bold', size: 10 }, anchor: 'end',
+            align: (ctx) => {
+              const lbl = ctx.chart.data.labels[ctx.dataIndex];
+              if (lbl === 'Anomalia') return 315;
+              if (lbl === 'Crítico') return 45;
+              return 'end';
+            },
+            offset: 8, clamp: true,
+            formatter: (val, ctx) => {
+              if (laudosLabels[0] === 'Sem Dados') return '';
+              const sum = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+              return val > 0 ? val + '; ' + (sum > 0 ? Math.round((val / sum) * 100) : 0) + '%' : '';
+            }
+          }
+        }
+      }
+    });
+
+    const espLabels = Object.keys(_laudosPorEsp).filter(e => (_laudosPorEsp[e].normal + _laudosPorEsp[e].anomalia + _laudosPorEsp[e].critico) > 0);
+    const dNormal = espLabels.map(e => _laudosPorEsp[e].normal);
+    const dAnomalia = espLabels.map(e => _laudosPorEsp[e].anomalia);
+    const dCritico = espLabels.map(e => _laudosPorEsp[e].critico);
+    const datasetsEsp = [];
+    if (dNormal.some(v => v > 0)) datasetsEsp.push({ label: 'Normal', data: dNormal, backgroundColor: '#198754' });
+    if (dAnomalia.some(v => v > 0)) datasetsEsp.push({ label: 'Anomalia', data: dAnomalia, backgroundColor: '#ffc107' });
+    if (dCritico.some(v => v > 0)) datasetsEsp.push({ label: 'Crítico', data: dCritico, backgroundColor: '#dc3545' });
+    if (!datasetsEsp.length) datasetsEsp.push({ label: 'Sem dados', data: [0], backgroundColor: '#ccc' });
+    new Chart(document.getElementById('chartEspecialidadeLaudos'), {
+      type: 'bar',
+      data: { labels: espLabels.length ? espLabels : ['Sem dados'], datasets: datasetsEsp },
+      options: {
+        maintainAspectRatio: false, layout: { padding: { top: 20 } },
+        plugins: {
+          legend: { position: 'top', labels: { boxWidth: 10, font: { size: 10, weight: 'bold' } } },
+          datalabels: { color: (ctx) => ctx.dataset.label === 'Anomalia' ? '#000' : '#fff', anchor: 'center', align: 'center', formatter: (val) => val > 0 ? val : '' }
+        },
+        scales: { x: { stacked: true, ticks: { maxRotation: 45, minRotation: 45, font: { size: 9, weight: 'bold' } } }, y: { stacked: true, beginAtZero: true, display: false } }
+      }
+    });
+
+    const campoLabels = Object.keys(_campoByEsp).filter(e => _campoByEsp[e] > 0);
+    new Chart(document.getElementById('chartCampo'), {
+      type: 'bar',
+      data: { labels: campoLabels.length ? campoLabels : ['Nenhum no Campo'], datasets: [{ data: campoLabels.length ? campoLabels.map(e => _campoByEsp[e]) : [0], backgroundColor: '#0d6efd' }] },
+      options: { indexAxis: 'y', maintainAspectRatio: false, layout: { padding: { left: 15, right: 30 } }, plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'right', color: '#000' } }, scales: { x: { display: false }, y: { ticks: { font: { size: 10, weight: 'bold' } } } } }
+    });
+
+    new Chart(document.getElementById('chartLocais'), {
+      type: 'bar',
+      data: { labels: ['Base', 'Campo', 'Garantia'], datasets: [{ data: [_tBase, _tCampo, _tGarantia], backgroundColor: '#0dcaf0' }] },
+      options: { indexAxis: 'y', maintainAspectRatio: false, layout: { padding: { left: 15, right: 30 } }, plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'right', color: '#000' } }, scales: { x: { display: false }, y: { ticks: { font: { size: 10, weight: 'bold' } } } } }
+    });
+
+    const nrLabels = Object.keys(_byEspNaoRealizado).filter(e => _byEspNaoRealizado[e] > 0);
+    const nrPendente = nrLabels.map(e => _byEspPendente[e] || 0);
+    const datasetsNR = nrLabels.length
+      ? (nrPendente.some(v => v > 0) ? [{ label: 'Reprogramado', data: nrPendente, backgroundColor: '#0070c0' }] : [])
+      : [{ label: 'OK', data: [0], backgroundColor: '#198754' }];
+    new Chart(document.getElementById('chartNaoRealizadasMotivos'), {
+      type: 'bar',
+      data: { labels: nrLabels.length ? nrLabels : ['Todas Foram Feitas!'], datasets: datasetsNR },
+      options: {
+        maintainAspectRatio: false, layout: { padding: { top: 20 } },
+        plugins: {
+          legend: { position: 'top', labels: { boxWidth: 12, font: { size: 10, weight: 'bold' } } },
+          datalabels: { anchor: 'center', align: 'center', color: '#fff', formatter: (val) => val > 0 ? val : '' }
+        },
+        scales: { x: { stacked: true, ticks: { maxRotation: 45, minRotation: 45, font: { size: 9, weight: 'bold' } } }, y: { stacked: true, display: false, beginAtZero: true } }
+      }
+    });
+
+    function gerarPDF() {
+      const btn = document.querySelector('.btn-print-bar');
+      const orig = btn.innerHTML;
+      btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>A Gerar PDF...';
+      btn.disabled = true;
+      const opt = { margin: 0, filename: 'Aderencia_Analise_Oleo_A4_${safePeriod}.pdf', image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 2, useCORS: true, scrollY: 0, scrollX: 0 }, jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' } };
+      setTimeout(() => { html2pdf().set(opt).from(document.getElementById('relatorioCompleto')).save().then(() => { btn.innerHTML = orig; btn.disabled = false; }); }, 300);
+    }
+  <\/script>
 </body>
 </html>`;
 }
@@ -792,7 +1128,15 @@ function openSchedulePrintReport() {
   const reportWindow = window.open("", "_blank");
   if (!reportWindow) return;
   reportWindow.document.open();
-  reportWindow.document.write(buildSchedulePrintHtml());
+  reportWindow.document.write(buildScheduleTablePrintHtml());
+  reportWindow.document.close();
+}
+
+function openScheduleAdherenceReport() {
+  const reportWindow = window.open("", "_blank");
+  if (!reportWindow) return;
+  reportWindow.document.open();
+  reportWindow.document.write(buildScheduleAdherencePrintHtml());
   reportWindow.document.close();
 }
 
@@ -1937,6 +2281,7 @@ document.querySelector("#next-period").addEventListener("click", () => {
 });
 
 document.querySelector("#print-schedule").addEventListener("click", openSchedulePrintReport);
+document.querySelector("#print-schedule-adherence").addEventListener("click", openScheduleAdherenceReport);
 
 // --- Excluir toda a programacao (admin only) ---
 document.querySelector("#clear-all-schedule").addEventListener("click", async () => {
