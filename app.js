@@ -18,6 +18,9 @@ const userRoles = {
 const fleetCsvPath = "database/base_frotas.csv";
 const analysisCsvPath = "database/analises_chb.csv";
 let allHistoricalCriticals = [];
+let criticosTimelines = {};
+let criticosTimelinesLoaded = false;
+let expandedCriticoKeys = new Set();
 let collectionsByDay = [];
 let riskByComponent = [];
 let priorities = [];
@@ -237,7 +240,93 @@ function mergeIntoCriticalHistory(existing, newRows) {
   return Array.from(seen.values()).sort((a, b) => (b.data_coleta || "").localeCompare(a.data_coleta || ""));
 }
 
-function renderCriticosTab() {
+function criticoKey(r) {
+  return `${r.cod_frota}|${r.cod_compartimento}|${r.data_coleta}`;
+}
+
+function tipoLabel(tipo) {
+  const map = { Observacao: "Observação", Inspecao: "Inspeção", Manutencao: "Manutenção", Resolucao: "Resolução" };
+  return map[tipo] || tipo;
+}
+
+function tipoClass(tipo) {
+  const map = { Observacao: "tipo-obs", Inspecao: "tipo-insp", Manutencao: "tipo-manut", Resolucao: "tipo-res" };
+  return map[tipo] || "tipo-obs";
+}
+
+function renderTimelineHtml(key) {
+  const entries = criticosTimelines[key] || [];
+  const entriesHtml = entries.length
+    ? entries.map((e) => `
+        <div class="tl-entry">
+          <div class="tl-dot"></div>
+          <div class="tl-body">
+            <div class="tl-meta">
+              <span class="tl-tipo ${tipoClass(e.tipo)}">${tipoLabel(e.tipo)}</span>
+              <span class="tl-date">${new Date(e.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+              ${e.registrado_por ? `<span class="tl-user">• ${escapeHtml(e.registrado_por)}</span>` : ""}
+            </div>
+            <p class="tl-texto">${escapeHtml(e.texto)}</p>
+          </div>
+        </div>`).join("")
+    : `<p class="tl-empty">Nenhuma acao registrada ainda.</p>`;
+
+  return `
+    <div class="critico-timeline" data-key="${escapeHtml(key)}">
+      <div class="tl-entries">${entriesHtml}</div>
+      <form class="tl-add-form" data-key="${escapeHtml(key)}">
+        <select name="tipo" class="tl-tipo-select">
+          <option value="Observacao">Observação</option>
+          <option value="Inspecao">Inspeção</option>
+          <option value="Manutencao">Manutenção</option>
+          <option value="Resolucao">Resolução</option>
+        </select>
+        <textarea name="texto" placeholder="Descreva a acao tomada..." rows="2" required></textarea>
+        <button type="submit" class="tl-submit">Registrar</button>
+      </form>
+    </div>`;
+}
+
+async function loadCriticosTimelines() {
+  if (!supabaseClient || criticosTimelinesLoaded) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from("criticos_timeline")
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    criticosTimelines = {};
+    for (const e of data || []) {
+      if (!criticosTimelines[e.critico_key]) criticosTimelines[e.critico_key] = [];
+      criticosTimelines[e.critico_key].push(e);
+    }
+    criticosTimelinesLoaded = true;
+  } catch (err) {
+    console.warn("Nao foi possivel carregar timelines de criticos", err);
+  }
+}
+
+async function addCriticoTimelineEntry(key, texto, tipo) {
+  const entry = { critico_key: key, texto, tipo, registrado_por: currentUserLabel(), created_at: new Date().toISOString() };
+  if (supabaseClient) {
+    const { data, error } = await supabaseClient.from("criticos_timeline").insert(entry).select().single();
+    if (error) throw error;
+    entry.id = data.id;
+  }
+  if (!criticosTimelines[key]) criticosTimelines[key] = [];
+  criticosTimelines[key].push(entry);
+  const timelineEl = document.querySelector(`.critico-timeline[data-key="${CSS.escape(key)}"]`);
+  if (timelineEl) timelineEl.outerHTML = renderTimelineHtml(key);
+  const btn = document.querySelector(`.tl-toggle-btn[data-critico-key="${CSS.escape(key)}"]`);
+  if (btn) {
+    const count = criticosTimelines[key].length;
+    const existing = btn.querySelector(".tl-count-badge");
+    if (existing) existing.textContent = count;
+    else btn.insertAdjacentHTML("afterbegin", `<span class="tl-count-badge">${count}</span>`);
+  }
+}
+
+async function renderCriticosTab() {
   const totalEl = document.querySelector("#criticos-total");
   const frotasEl = document.querySelector("#criticos-frotas");
   const compartEl = document.querySelector("#criticos-compartimentos");
@@ -248,6 +337,8 @@ function renderCriticosTab() {
   const searchEl = document.querySelector("#criticos-search");
   const filterSelect = document.querySelector("#criticos-filter-compartimento");
   if (!tbody) return;
+
+  await loadCriticosTimelines();
 
   const search = (searchEl?.value || "").toLowerCase();
   const filterComp = filterSelect?.value || "";
@@ -276,18 +367,29 @@ function renderCriticosTab() {
     filterSelect.innerHTML = '<option value="">Todos compartimentos</option>' + comps.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
   }
 
-  tbody.innerHTML = filtered
-    .map(
-      (r) => `
-      <tr>
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted)">Nenhum registro critico encontrado</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map((r) => {
+    const key = criticoKey(r);
+    const isOpen = expandedCriticoKeys.has(key);
+    const count = (criticosTimelines[key] || []).length;
+    const countBadge = count ? `<span class="tl-count-badge">${count}</span>` : "";
+    return `
+      <tr class="critico-row${isOpen ? " is-open" : ""}" data-critico-key="${escapeHtml(key)}">
         <td><strong>${escapeHtml(r.cod_frota)}</strong></td>
         <td>${escapeHtml(r.compartimento)}</td>
         <td>${formatDate(r.data_coleta)}</td>
         <td>${tagFor("Critico")}</td>
-        <td style="max-width:260px;white-space:normal;font-size:.8rem">${escapeHtml(r.resultado_laudo || r.resultado || "—")}</td>
-      </tr>`
-    )
-    .join("") || `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--muted)">Nenhum registro critico encontrado</td></tr>`;
+        <td style="max-width:220px;white-space:normal;font-size:.8rem">${escapeHtml(r.resultado_laudo || r.resultado || "—")}</td>
+        <td><button class="tl-toggle-btn" data-critico-key="${escapeHtml(key)}" title="Ver linha do tempo">${countBadge}<span class="tl-arrow">${isOpen ? "▲" : "▼"}</span></button></td>
+      </tr>
+      <tr class="critico-timeline-row${isOpen ? "" : " hidden"}" data-critico-key="${escapeHtml(key)}">
+        <td colspan="6">${renderTimelineHtml(key)}</td>
+      </tr>`;
+  }).join("");
 }
 
 function renderCriticalResidency() {
@@ -2315,6 +2417,44 @@ document.querySelectorAll("[data-open-results]").forEach((button) => {
 
 document.querySelector("#criticos-search").addEventListener("input", renderCriticosTab);
 document.querySelector("#criticos-filter-compartimento").addEventListener("change", renderCriticosTab);
+
+document.querySelector("#criticos-table").addEventListener("click", (e) => {
+  const btn = e.target.closest(".tl-toggle-btn");
+  if (!btn) return;
+  const key = btn.dataset.criticoKey;
+  if (expandedCriticoKeys.has(key)) expandedCriticoKeys.delete(key);
+  else expandedCriticoKeys.add(key);
+  const mainRow = document.querySelector(`.critico-row[data-critico-key="${CSS.escape(key)}"]`);
+  const tlRow = document.querySelector(`.critico-timeline-row[data-critico-key="${CSS.escape(key)}"]`);
+  const arrow = btn.querySelector(".tl-arrow");
+  if (mainRow) mainRow.classList.toggle("is-open", expandedCriticoKeys.has(key));
+  if (tlRow) tlRow.classList.toggle("hidden", !expandedCriticoKeys.has(key));
+  if (arrow) arrow.textContent = expandedCriticoKeys.has(key) ? "▲" : "▼";
+});
+
+document.querySelector("#criticos-table").addEventListener("submit", async (e) => {
+  const form = e.target.closest(".tl-add-form");
+  if (!form) return;
+  e.preventDefault();
+  const key = form.dataset.key;
+  const texto = form.elements.texto.value.trim();
+  const tipo = form.elements.tipo.value;
+  if (!texto) return;
+  const btn = form.querySelector(".tl-submit");
+  btn.disabled = true;
+  btn.textContent = "Salvando...";
+  try {
+    await addCriticoTimelineEntry(key, texto, tipo);
+    form.elements.texto.value = "";
+  } catch (err) {
+    console.error("Erro ao salvar entrada de timeline", err);
+    btn.textContent = "Erro — tente novamente";
+    setTimeout(() => { btn.disabled = false; btn.textContent = "Registrar"; }, 2000);
+    return;
+  }
+  btn.disabled = false;
+  btn.textContent = "Registrar";
+});
 
 document.querySelector("#fleet-search").addEventListener("input", (event) => {
   const term = event.target.value.trim().toLowerCase();
