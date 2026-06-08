@@ -22,6 +22,7 @@
         <button class="nav-item" data-view="collections">Programacao</button>
         <button class="nav-item" data-view="results">Resultados</button>
         <button class="nav-item" data-view="residency">Reincidencias</button>
+        <button class="nav-item" data-view="criticos">Criticos</button>
       </nav>
     </aside>
 
@@ -202,6 +203,58 @@
             <span>Baseado no relatorio CHB atual</span>
           </div>
           <div class="residency-list" id="critical-residency-list"></div>
+        </section>
+      </section>
+
+      <section class="view" id="criticos">
+        <div class="metric-grid">
+          <article class="metric danger">
+            <span>Total de criticos historico</span>
+            <strong id="criticos-total">0</strong>
+            <small>Todos os registros salvos</small>
+          </article>
+          <article class="metric danger">
+            <span>Frotas com critico</span>
+            <strong id="criticos-frotas">0</strong>
+            <small>Frotas unicas afetadas</small>
+          </article>
+          <article class="metric">
+            <span>Compartimentos afetados</span>
+            <strong id="criticos-compartimentos">0</strong>
+            <small>Tipos distintos</small>
+          </article>
+          <article class="metric">
+            <span>Periodo coberto</span>
+            <strong id="criticos-periodo">—</strong>
+            <small id="criticos-periodo-detalhe">Primeira e ultima ocorrencia</small>
+          </article>
+        </div>
+
+        <section class="panel wide">
+          <div class="panel-header">
+            <h2>Historico completo de criticos</h2>
+            <span id="criticos-subtitulo">Todos os relatorios salvos</span>
+          </div>
+          <div class="table-filters" style="display:flex;gap:.5rem;flex-wrap:wrap;padding:.75rem 1rem 0">
+            <input type="text" id="criticos-search" placeholder="Buscar frota ou compartimento..." style="flex:1;min-width:180px;padding:.4rem .6rem;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:inherit;font-size:.85rem" />
+            <select id="criticos-filter-compartimento" style="padding:.4rem .6rem;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:inherit;font-size:.85rem">
+              <option value="">Todos compartimentos</option>
+            </select>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Frota</th>
+                  <th>Compartimento</th>
+                  <th>Data coleta</th>
+                  <th>Resultado</th>
+                  <th>Diagnostico</th>
+                </tr>
+              </thead>
+              <tbody id="criticos-table"></tbody>
+            </table>
+          </div>
         </section>
       </section>
 

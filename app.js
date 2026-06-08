@@ -4,6 +4,7 @@ const pageTitles = {
   collections: "Programacao de coletas",
   results: "Resultados das analises",
   residency: "Reincidencias criticas",
+  criticos: "Historico de criticos",
 };
 
 const supabaseUrl = "https://xgfxsvvypffmibyuhdrd.supabase.co";
@@ -16,7 +17,7 @@ const userRoles = {
 };
 const fleetCsvPath = "database/base_frotas.csv";
 const analysisCsvPath = "database/analises_chb.csv";
-const currentReportId = "chb-atual";
+let allHistoricalCriticals = [];
 let collectionsByDay = [];
 let riskByComponent = [];
 let priorities = [];
@@ -220,6 +221,73 @@ function renderAnomalyFleetDetails() {
       `
     )
     .join("");
+}
+
+function mergeIntoCriticalHistory(existing, newRows) {
+  const seen = new Map();
+  for (const r of existing) {
+    const key = `${r.cod_frota}|${r.cod_compartimento}|${r.data_coleta}`;
+    seen.set(key, r);
+  }
+  for (const r of newRows) {
+    if (r.classificacao !== "Critico") continue;
+    const key = `${r.cod_frota}|${r.cod_compartimento}|${r.data_coleta}`;
+    if (!seen.has(key)) seen.set(key, r);
+  }
+  return Array.from(seen.values()).sort((a, b) => (b.data_coleta || "").localeCompare(a.data_coleta || ""));
+}
+
+function renderCriticosTab() {
+  const totalEl = document.querySelector("#criticos-total");
+  const frotasEl = document.querySelector("#criticos-frotas");
+  const compartEl = document.querySelector("#criticos-compartimentos");
+  const periodoEl = document.querySelector("#criticos-periodo");
+  const periodoDetailEl = document.querySelector("#criticos-periodo-detalhe");
+  const subtituloEl = document.querySelector("#criticos-subtitulo");
+  const tbody = document.querySelector("#criticos-table");
+  const searchEl = document.querySelector("#criticos-search");
+  const filterSelect = document.querySelector("#criticos-filter-compartimento");
+  if (!tbody) return;
+
+  const search = (searchEl?.value || "").toLowerCase();
+  const filterComp = filterSelect?.value || "";
+
+  const filtered = allHistoricalCriticals.filter((r) => {
+    if (filterComp && r.compartimento !== filterComp) return false;
+    if (search && !r.cod_frota.toLowerCase().includes(search) && !r.compartimento.toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  if (totalEl) totalEl.textContent = allHistoricalCriticals.length.toLocaleString("pt-BR");
+  if (frotasEl) frotasEl.textContent = new Set(allHistoricalCriticals.map((r) => r.cod_frota)).size.toLocaleString("pt-BR");
+  if (compartEl) compartEl.textContent = new Set(allHistoricalCriticals.map((r) => r.compartimento)).size.toLocaleString("pt-BR");
+
+  const dates = allHistoricalCriticals.map((r) => r.data_coleta).filter(Boolean).sort();
+  if (dates.length) {
+    if (periodoEl) periodoEl.textContent = `${formatDate(dates[0])} – ${formatDate(dates[dates.length - 1])}`;
+    if (periodoDetailEl) periodoDetailEl.textContent = "Primeira e ultima ocorrencia";
+  } else {
+    if (periodoEl) periodoEl.textContent = "—";
+  }
+  if (subtituloEl) subtituloEl.textContent = `${allHistoricalCriticals.length.toLocaleString("pt-BR")} ocorrencias historicas`;
+
+  if (filterSelect && filterSelect.options.length <= 1) {
+    const comps = [...new Set(allHistoricalCriticals.map((r) => r.compartimento))].sort();
+    filterSelect.innerHTML = '<option value="">Todos compartimentos</option>' + comps.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  }
+
+  tbody.innerHTML = filtered
+    .map(
+      (r) => `
+      <tr>
+        <td><strong>${escapeHtml(r.cod_frota)}</strong></td>
+        <td>${escapeHtml(r.compartimento)}</td>
+        <td>${formatDate(r.data_coleta)}</td>
+        <td>${tagFor("Critico")}</td>
+        <td style="max-width:260px;white-space:normal;font-size:.8rem">${escapeHtml(r.resultado_laudo || r.resultado || "—")}</td>
+      </tr>`
+    )
+    .join("") || `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--muted)">Nenhum registro critico encontrado</td></tr>`;
 }
 
 function renderCriticalResidency() {
@@ -1879,21 +1947,29 @@ async function loadAnalysisCsv() {
       const { data, error } = await supabaseClient
         .from("relatorios_chb")
         .select("id, nome_arquivo, linhas, data_min, data_max, uploaded_by, updated_at")
-        .eq("id", currentReportId)
-        .maybeSingle();
+        .order("updated_at", { ascending: false });
 
       if (error) throw error;
 
-      if (data?.linhas?.length) {
-        activeReportKey = `supabase-${data.updated_at || data.id}`;
+      if (data?.length) {
+        const seen = new Map();
+        for (const report of data) {
+          for (const row of report.linhas || []) {
+            const key = `${row.cod_frota}|${row.cod_compartimento}|${row.data_coleta}`;
+            if (!seen.has(key)) seen.set(key, row);
+          }
+        }
+        const latest = data[0];
+        activeReportKey = `supabase-${latest.updated_at || latest.id}`;
         reportResultDetails = {};
-        analyses = data.linhas.map(normalizeAnalysisRecord);
-        setDefaultDateRange(data.data_min && data.data_max ? { min: data.data_min, max: data.data_max } : getAnalysisDateRange());
-        document.querySelector("#report-file-name").textContent = data.nome_arquivo || "Ultimo relatorio";
+        analyses = Array.from(seen.values()).map(normalizeAnalysisRecord);
+        allHistoricalCriticals = analyses.filter((r) => r.classificacao === "Critico");
+        setDefaultDateRange(latest.data_min && latest.data_max ? { min: latest.data_min, max: latest.data_max } : getAnalysisDateRange());
+        document.querySelector("#report-file-name").textContent = latest.nome_arquivo || "Ultimo relatorio";
         renderReportMeta({
-          range: data.data_min && data.data_max ? { min: data.data_min, max: data.data_max } : getAnalysisDateRange(),
-          uploadedAt: data.updated_at,
-          uploadedBy: data.uploaded_by,
+          range: latest.data_min && latest.data_max ? { min: latest.data_min, max: latest.data_max } : getAnalysisDateRange(),
+          uploadedAt: latest.updated_at,
+          uploadedBy: latest.uploaded_by,
           total: analyses.length,
         });
         updateDashboardFromAnalyses();
@@ -1916,6 +1992,7 @@ async function loadAnalysisCsv() {
     activeReportKey = "default";
     reportResultDetails = {};
     analyses = parseCsv(text).map(normalizeAnalysisRecord);
+    allHistoricalCriticals = analyses.filter((r) => r.classificacao === "Critico");
     setReportDateRangeFromRows();
     document.querySelector("#report-file-name").textContent = "Base padrao";
     renderReportMeta({ uploadedBy: "Base local", total: analyses.length });
@@ -1943,9 +2020,10 @@ async function saveCurrentReport(file, rows) {
   if (!supabaseClient) return false;
   const range = getAnalysisDateRange(rows);
   const uploadedAt = new Date().toISOString();
+  const reportId = `chb-${Date.now()}`;
 
-  const { error } = await supabaseClient.from("relatorios_chb").upsert({
-    id: currentReportId,
+  const { error } = await supabaseClient.from("relatorios_chb").insert({
+    id: reportId,
     nome_arquivo: file.name,
     linhas: compactAnalysisRows(rows),
     data_min: range.min || null,
@@ -2021,6 +2099,7 @@ async function handleAnalysisUpload(event) {
     }
 
     const reportInfo = await saveCurrentReport(file, analyses);
+    allHistoricalCriticals = mergeIntoCriticalHistory(allHistoricalCriticals, analyses);
     setReportDateRangeFromRows();
     fileName.textContent = file.name;
     renderReportMeta({
@@ -2218,6 +2297,7 @@ function activateView(view) {
   document.querySelectorAll(".view").forEach((section) => section.classList.remove("active"));
   document.querySelector(`#${view}`).classList.add("active");
   document.querySelector("#page-title").textContent = pageTitles[view];
+  if (view === "criticos") renderCriticosTab();
 }
 
 document.querySelectorAll(".nav-item").forEach((button) => {
@@ -2232,6 +2312,9 @@ document.querySelectorAll("[data-open-results]").forEach((button) => {
     renderResultsQueue();
   });
 });
+
+document.querySelector("#criticos-search").addEventListener("input", renderCriticosTab);
+document.querySelector("#criticos-filter-compartimento").addEventListener("change", renderCriticosTab);
 
 document.querySelector("#fleet-search").addEventListener("input", (event) => {
   const term = event.target.value.trim().toLowerCase();

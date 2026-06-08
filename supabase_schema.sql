@@ -49,6 +49,7 @@ for delete
 to authenticated
 using (true);
 
+-- id usa formato "chb-<timestamp>" (ex: chb-1748000000000) — cada upload gera um novo registro
 create table if not exists public.relatorios_chb (
   id text primary key,
   nome_arquivo text,
@@ -85,3 +86,10 @@ for update
 to authenticated
 using (true)
 with check (true);
+
+drop policy if exists "Usuarios logados podem excluir relatorios chb" on public.relatorios_chb;
+create policy "Usuarios logados podem excluir relatorios chb"
+on public.relatorios_chb
+for delete
+to authenticated
+using (true);
