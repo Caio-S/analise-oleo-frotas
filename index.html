@@ -23,6 +23,7 @@
         <button class="nav-item" data-view="results">Resultados</button>
         <button class="nav-item" data-view="residency">Reincidencias</button>
         <button class="nav-item" data-view="criticos">Criticos</button>
+        <button class="nav-item" data-view="oil">Manutencao Basica</button>
       </nav>
     </aside>
 
@@ -257,6 +258,129 @@
             </table>
           </div>
         </section>
+      </section>
+
+      <section class="view" id="oil">
+        <div class="metric-grid">
+          <article class="metric">
+            <span id="oil-metric-total-label">Servicos no periodo</span>
+            <strong id="oil-metric-total">0</strong>
+            <small id="oil-report-status">Envie o relatorio de execucao (TFR19).</small>
+          </article>
+          <article class="metric">
+            <span>Media por dia</span>
+            <strong id="oil-metric-daily">0</strong>
+            <small id="oil-metric-daily-detail">Dias com servico registrado</small>
+          </article>
+          <article class="metric">
+            <span id="oil-metric-liters-label">Litros trocados</span>
+            <strong id="oil-metric-liters">0</strong>
+            <small id="oil-metric-liters-avg">0 L por troca em media</small>
+          </article>
+          <article class="metric">
+            <span>Tempo medio</span>
+            <strong id="oil-metric-duration">0</strong>
+            <small>Minutos por troca</small>
+          </article>
+        </div>
+
+        <section class="panel report-controls">
+          <div class="panel-header">
+            <h2>Relatorio de execucao (TFR19)</h2>
+            <span id="oil-file-name">Nenhum relatorio carregado</span>
+          </div>
+          <div class="report-toolbar">
+            <label>
+              Enviar relatorio (TFR19)
+              <input id="oil-upload" type="file" accept=".xlsx,.xls,.csv" />
+            </label>
+            <label>
+              Servico
+              <select id="oil-service-select">
+                <option value="troca-oleo">Troca de oleo</option>
+                <option value="coleta-oleo">Coleta de oleo</option>
+                <option value="troca-filtro">Troca de filtro</option>
+              </select>
+            </label>
+            <label>
+              Data inicial
+              <input id="oil-date-min" type="date" />
+            </label>
+            <label>
+              Data final
+              <input id="oil-date-max" type="date" />
+            </label>
+            <button class="secondary-button" id="oil-clear-filter" type="button">Limpar filtro</button>
+            <button class="primary-button" id="oil-print" type="button">Gerar PDF</button>
+          </div>
+          <div class="report-meta">
+            <span id="oil-report-period">Periodo: --</span>
+            <span id="oil-report-vehicles">Veiculos atendidos: --</span>
+            <span id="oil-report-top-oil">Oleo mais usado: --</span>
+          </div>
+        </section>
+
+        <div class="dashboard-grid">
+          <section class="panel wide">
+            <div class="panel-header">
+              <h2 id="oil-daily-title">Servicos por dia</h2>
+              <span id="oil-daily-hint">Linha de media diaria</span>
+            </div>
+            <div class="bar-chart" id="oil-daily-chart"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Media por dia da semana</h2>
+              <span>Servicos por dia</span>
+            </div>
+            <div class="risk-list" id="oil-weekday-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2 id="oil-secondary-title">Consumo por tipo de oleo</h2>
+              <span id="oil-secondary-hint">Litros</span>
+            </div>
+            <div class="risk-list" id="oil-product-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Trocas por compartimento</h2>
+              <span>Motor, transmissao...</span>
+            </div>
+            <div class="problem-pie-panel" id="oil-compartment-pie"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Ranking de veiculos</h2>
+              <span>Mais trocas no periodo</span>
+            </div>
+            <div class="risk-list" id="oil-vehicle-list"></div>
+          </section>
+
+          <section class="panel wide">
+            <div class="panel-header">
+              <h2>Produtividade por mecanico</h2>
+              <span>Trocas e tempo medio</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Mecanico</th>
+                    <th id="oil-mech-th-service">Trocas</th>
+                    <th id="oil-mech-th-liters">Litros</th>
+                    <th>Tempo medio (min)</th>
+                  </tr>
+                </thead>
+                <tbody id="oil-mechanic-table"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       </section>
 
       <section class="view" id="fleet">

@@ -5,6 +5,7 @@ const pageTitles = {
   results: "Resultados das analises",
   residency: "Reincidencias criticas",
   criticos: "Historico de criticos",
+  oil: "Manutencao basica por servico",
 };
 
 const supabaseUrl = "https://xgfxsvvypffmibyuhdrd.supabase.co";
@@ -2400,6 +2401,7 @@ function activateView(view) {
   document.querySelector(`#${view}`).classList.add("active");
   document.querySelector("#page-title").textContent = pageTitles[view];
   if (view === "criticos") renderCriticosTab();
+  if (view === "oil") renderOilTab();
 }
 
 document.querySelectorAll(".nav-item").forEach((button) => {
@@ -2464,6 +2466,527 @@ document.querySelector("#fleet-search").addEventListener("input", (event) => {
 });
 
 document.querySelector("#fleet-form").addEventListener("submit", handleFleetSubmit);
+
+// ==========================================================================
+// Troca de oleo (relatorio de execucao TFR19)
+// ==========================================================================
+
+let oilRecords = [];
+let oilFileName = "";
+const OIL_PIE_COLORS = ["#1976d2", "#d97706", "#16a34a", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d", "#ca8a04", "#475467"];
+const WEEKDAY_LABELS = ["Domingo", "Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado"];
+
+// Servicos de manutencao basica presentes no export TFR19.
+const OIL_SERVICES = {
+  "troca-oleo": { match: "troca de oleo", label: "Troca de oleo", noun: "Troca", nounPlural: "Trocas", hasProduct: true },
+  "coleta-oleo": { match: "coleta de oleo", label: "Coleta de oleo", noun: "Coleta", nounPlural: "Coletas", hasProduct: false },
+  "troca-filtro": { match: "troca de filtro", label: "Troca de filtro", noun: "Troca", nounPlural: "Trocas", hasProduct: false },
+};
+
+function selectedOilServiceKey() {
+  const el = document.querySelector("#oil-service-select");
+  return el && OIL_SERVICES[el.value] ? el.value : "troca-oleo";
+}
+
+function classifyOilService(descricaoServico) {
+  const norm = normalizeHeader(descricaoServico);
+  for (const [key, cfg] of Object.entries(OIL_SERVICES)) {
+    if (norm.includes(cfg.match)) return key;
+  }
+  return null;
+}
+
+function normalizeHeader(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function parseTimeToMinutes(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (value instanceof Date) return value.getHours() * 60 + value.getMinutes();
+  if (typeof value === "number") {
+    // Fracao do dia (formato serial de horario do Excel)
+    const totalMinutes = Math.round((value % 1) * 24 * 60);
+    return totalMinutes;
+  }
+  const text = String(value).trim();
+  const match = text.match(/(\d{1,2}):(\d{2})/);
+  if (match) return Number(match[1]) * 60 + Number(match[2]);
+  return null;
+}
+
+function oilRecordsFromWorkbook(workbook) {
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+  if (!rows.length) return [];
+
+  const headers = (rows[0] || []).map(normalizeHeader);
+  const findCol = (candidates, fallbackIndex) => {
+    for (const cand of candidates) {
+      const exact = headers.indexOf(cand);
+      if (exact >= 0) return exact;
+    }
+    for (const cand of candidates) {
+      const partial = headers.findIndex((h) => h.includes(cand));
+      if (partial >= 0) return partial;
+    }
+    return fallbackIndex;
+  };
+
+  const idx = {
+    data: findCol(["data de execucao", "data execucao"], 0),
+    servico: findCol(["descricao servico"], 14),
+    veiculoCod: findCol(["veiculo"], 7),
+    veiculoDesc: findCol(["descricao veiculo"], 8),
+    compartimento: findCol(["descricao compart", "descricao compart."], 12),
+    produto: findCol(["descricao produto"], 17),
+    quantidade: findCol(["quantidade"], 20),
+    mecanico: findCol(["nome mecanico"], 24),
+    horaInicial: findCol(["hora inicial"], 25),
+    horaFinal: findCol(["hora final"], 26),
+    vida: findCol(["vida"], 31),
+  };
+
+  return rows
+    .slice(1)
+    .map((row) => {
+      const servico = classifyOilService(row[idx.servico]);
+      if (!servico) return null;
+      const inicio = parseTimeToMinutes(row[idx.horaInicial]);
+      const fim = parseTimeToMinutes(row[idx.horaFinal]);
+      let duracao = null;
+      if (inicio !== null && fim !== null && fim >= inicio && fim - inicio <= 600) {
+        duracao = fim - inicio;
+      }
+      const quantidade = Number(String(row[idx.quantidade]).replace(",", ".")) || 0;
+      return {
+        servico,
+        data: normalizeExcelDate(row[idx.data]),
+        veiculo: String(row[idx.veiculoDesc] || row[idx.veiculoCod] || "").trim() || "Nao informado",
+        compartimento: String(row[idx.compartimento] || "").trim() || "Nao informado",
+        produto: String(row[idx.produto] || "").trim() || "Sem produto",
+        quantidade,
+        mecanico: String(row[idx.mecanico] || "").trim() || "Nao informado",
+        duracao,
+      };
+    })
+    .filter((rec) => rec && rec.data);
+}
+
+function filteredOilRecords() {
+  const min = document.querySelector("#oil-date-min").value;
+  const max = document.querySelector("#oil-date-max").value;
+  const service = selectedOilServiceKey();
+  return oilRecords.filter((rec) => {
+    if (rec.servico !== service) return false;
+    if (min && rec.data < min) return false;
+    if (max && rec.data > max) return false;
+    return true;
+  });
+}
+
+function computeOilIndicators(records) {
+  const total = records.length;
+  const byDate = {};
+  const byWeekday = {};
+  const weekdayDates = {};
+  const byProduct = {};
+  const byCompartment = {};
+  const byVehicle = {};
+  const byMechanic = {};
+  let liters = 0;
+  let durationSum = 0;
+  let durationCount = 0;
+  const vehicles = new Set();
+
+  records.forEach((rec) => {
+    byDate[rec.data] = (byDate[rec.data] || 0) + 1;
+    liters += rec.quantidade;
+    vehicles.add(rec.veiculo);
+    byProduct[rec.produto] = (byProduct[rec.produto] || 0) + rec.quantidade;
+    byCompartment[rec.compartimento] = (byCompartment[rec.compartimento] || 0) + 1;
+    byVehicle[rec.veiculo] = (byVehicle[rec.veiculo] || 0) + 1;
+
+    const mech = (byMechanic[rec.mecanico] = byMechanic[rec.mecanico] || { count: 0, liters: 0, durationSum: 0, durationCount: 0 });
+    mech.count += 1;
+    mech.liters += rec.quantidade;
+
+    if (rec.duracao !== null) {
+      durationSum += rec.duracao;
+      durationCount += 1;
+      mech.durationSum += rec.duracao;
+      mech.durationCount += 1;
+    }
+
+    const weekday = new Date(`${rec.data}T12:00:00`).getDay();
+    byWeekday[weekday] = (byWeekday[weekday] || 0) + 1;
+    (weekdayDates[weekday] = weekdayDates[weekday] || new Set()).add(rec.data);
+  });
+
+  const distinctDays = Object.keys(byDate).length;
+  const dailySeries = Object.entries(byDate)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, count]) => ({ date, count }));
+
+  const weekdayAverages = [1, 2, 3, 4, 5, 6, 0].map((day) => {
+    const occurrences = weekdayDates[day] ? weekdayDates[day].size : 0;
+    const totalDay = byWeekday[day] || 0;
+    return { name: WEEKDAY_LABELS[day], count: totalDay, average: occurrences ? totalDay / occurrences : 0 };
+  });
+
+  const toSortedList = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1]);
+
+  const productList = toSortedList(byProduct).map(([name, value]) => ({ name, count: Math.round(value * 100) / 100 }));
+  const compartmentList = toSortedList(byCompartment).map(([name, count], i) => ({ name, count, color: OIL_PIE_COLORS[i % OIL_PIE_COLORS.length] }));
+  const vehicleList = toSortedList(byVehicle).map(([name, count]) => ({ name, count }));
+  const mechanicList = Object.entries(byMechanic)
+    .map(([name, m]) => ({ name, count: m.count, liters: Math.round(m.liters * 10) / 10, avgDuration: m.durationCount ? Math.round(m.durationSum / m.durationCount) : null }))
+    .sort((a, b) => b.count - a.count);
+
+  const topOil = productList.length ? productList[0].name : "--";
+
+  return {
+    total,
+    distinctDays,
+    dailyAverage: distinctDays ? total / distinctDays : 0,
+    liters: Math.round(liters * 10) / 10,
+    litersAvg: total ? liters / total : 0,
+    avgDuration: durationCount ? Math.round(durationSum / durationCount) : 0,
+    vehicles: vehicles.size,
+    topOil,
+    dailySeries,
+    weekdayAverages,
+    productList,
+    compartmentList,
+    vehicleList,
+    mechanicList,
+  };
+}
+
+function renderOilTab() {
+  const records = filteredOilRecords();
+  const data = computeOilIndicators(records);
+  const cfg = OIL_SERVICES[selectedOilServiceKey()];
+  const fmt = (n, dec = 0) => n.toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+
+  document.querySelector("#oil-metric-total-label").textContent = `${cfg.nounPlural} no periodo`;
+  document.querySelector("#oil-metric-total").textContent = fmt(data.total);
+  document.querySelector("#oil-metric-daily").textContent = fmt(data.dailyAverage, 1);
+  document.querySelector("#oil-metric-daily-detail").textContent = `${data.distinctDays} dia(s) com servico registrado`;
+  if (cfg.hasProduct) {
+    document.querySelector("#oil-metric-liters-label").textContent = "Litros trocados";
+    document.querySelector("#oil-metric-liters").textContent = fmt(data.liters, 1);
+    document.querySelector("#oil-metric-liters-avg").textContent = `${fmt(data.litersAvg, 1)} L por troca em media`;
+  } else {
+    document.querySelector("#oil-metric-liters-label").textContent = "Veiculos atendidos";
+    document.querySelector("#oil-metric-liters").textContent = fmt(data.vehicles);
+    document.querySelector("#oil-metric-liters-avg").textContent = "Frotas distintas no periodo";
+  }
+  document.querySelector("#oil-metric-duration").textContent = fmt(data.avgDuration);
+
+  document.querySelector("#oil-file-name").textContent = oilFileName || "Nenhum relatorio carregado";
+  const periods = data.dailySeries;
+  document.querySelector("#oil-report-period").textContent = periods.length
+    ? `Periodo: ${formatDate(periods[0].date)} a ${formatDate(periods[periods.length - 1].date)}`
+    : "Periodo: --";
+  document.querySelector("#oil-report-vehicles").textContent = `Veiculos atendidos: ${data.vehicles}`;
+  document.querySelector("#oil-report-top-oil").textContent = cfg.hasProduct
+    ? `Oleo mais usado: ${data.topOil}`
+    : `Compartimento top: ${data.compartmentList.length ? data.compartmentList[0].name : "--"}`;
+
+  // Grafico de servicos por dia com linha de media
+  const dailyChart = document.querySelector("#oil-daily-chart");
+  document.querySelector("#oil-daily-title").textContent = `${cfg.nounPlural} por dia`;
+  document.querySelector("#oil-daily-hint").textContent = `Media: ${fmt(data.dailyAverage, 1)}/dia`;
+  if (!data.dailySeries.length) {
+    dailyChart.innerHTML = `<div class="empty-state">Envie o relatorio de execucao para ver os servicos por dia.</div>`;
+  } else {
+    const maxDay = Math.max(...data.dailySeries.map((d) => d.count));
+    dailyChart.innerHTML = data.dailySeries
+      .map((d) => {
+        const height = Math.max(18, Math.round((d.count / maxDay) * 210));
+        return `<div class="bar" title="${formatDate(d.date)}: ${d.count} servico(s)" style="height:${height}px"><span>${d.count}</span></div>`;
+      })
+      .join("");
+  }
+
+  // Media por dia da semana
+  const weekdayList = document.querySelector("#oil-weekday-list");
+  const maxWeekday = Math.max(1, ...data.weekdayAverages.map((w) => w.average));
+  weekdayList.innerHTML = data.weekdayAverages
+    .map(
+      (w) => `
+        <div class="risk-item">
+          <div class="risk-meta"><strong>${w.name}</strong><span>${w.average.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}/dia</span></div>
+          <div class="track"><div class="fill fleet-fill" style="width:${Math.max(4, (w.average / maxWeekday) * 100)}%"></div></div>
+        </div>
+      `
+    )
+    .join("");
+
+  // Painel secundario: oleo -> consumo por tipo (litros); demais -> por compartimento (contagem)
+  const productListEl = document.querySelector("#oil-product-list");
+  const secondaryList = cfg.hasProduct
+    ? data.productList.map((p) => ({ name: p.name, value: p.count, suffix: " L", dec: 1 }))
+    : data.compartmentList.map((c) => ({ name: c.name, value: c.count, suffix: "", dec: 0 }));
+  document.querySelector("#oil-secondary-title").textContent = cfg.hasProduct ? "Consumo por tipo de oleo" : "Distribuicao por compartimento";
+  document.querySelector("#oil-secondary-hint").textContent = cfg.hasProduct ? "Litros" : "Servicos";
+  if (!secondaryList.length) {
+    productListEl.innerHTML = `<div class="empty-state">Sem dados no periodo.</div>`;
+  } else {
+    const maxSecondary = Math.max(...secondaryList.map((p) => p.value));
+    productListEl.innerHTML = secondaryList
+      .map(
+        (p) => `
+          <div class="risk-item">
+            <div class="risk-meta"><strong title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</strong><span>${p.value.toLocaleString("pt-BR", { maximumFractionDigits: p.dec })}${p.suffix}</span></div>
+            <div class="track"><div class="fill" style="width:${Math.max(4, (p.value / maxSecondary) * 100)}%"></div></div>
+          </div>
+        `
+      )
+      .join("");
+  }
+
+  // Trocas por compartimento (pizza)
+  renderPiePanel("#oil-compartment-pie", data.compartmentList.slice(0, 8), "Sem trocas no periodo.");
+
+  // Ranking de veiculos
+  const vehicleListEl = document.querySelector("#oil-vehicle-list");
+  const topVehicles = data.vehicleList.slice(0, 10);
+  if (!topVehicles.length) {
+    vehicleListEl.innerHTML = `<div class="empty-state">Sem veiculos no periodo.</div>`;
+  } else {
+    const maxVehicle = Math.max(...topVehicles.map((v) => v.count));
+    vehicleListEl.innerHTML = topVehicles
+      .map(
+        (v) => `
+          <div class="risk-item">
+            <div class="risk-meta"><strong title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</strong><span>${v.count}</span></div>
+            <div class="track"><div class="fill" style="width:${Math.max(4, (v.count / maxVehicle) * 100)}%"></div></div>
+          </div>
+        `
+      )
+      .join("");
+  }
+
+  // Produtividade por mecanico
+  const mechTable = document.querySelector("#oil-mechanic-table");
+  document.querySelector("#oil-mech-th-service").textContent = cfg.nounPlural;
+  document.querySelector("#oil-mech-th-liters").hidden = !cfg.hasProduct;
+  mechTable.innerHTML = data.mechanicList.length
+    ? data.mechanicList
+        .map(
+          (m) => `
+            <tr>
+              <td>${escapeHtml(m.name)}</td>
+              <td>${m.count}</td>
+              ${cfg.hasProduct ? `<td>${m.liters.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</td>` : ""}
+              <td>${m.avgDuration === null ? "--" : m.avgDuration}</td>
+            </tr>
+          `
+        )
+        .join("")
+    : `<tr><td colspan="${cfg.hasProduct ? 4 : 3}">Sem servicos no periodo.</td></tr>`;
+}
+
+async function handleOilUpload(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const status = document.querySelector("#oil-report-status");
+  status.textContent = "Lendo relatorio...";
+  try {
+    const buffer = await file.arrayBuffer();
+    const workbook = window.XLSX.read(buffer, { type: "array", cellDates: true });
+    oilRecords = oilRecordsFromWorkbook(workbook);
+    oilFileName = file.name;
+    document.querySelector("#oil-date-min").value = "";
+    document.querySelector("#oil-date-max").value = "";
+    if (!oilRecords.length) {
+      status.textContent = "Nenhum servico de manutencao basica encontrado no relatorio (TFR19).";
+    } else {
+      status.textContent = `${oilRecords.length.toLocaleString("pt-BR")} servico(s) de manutencao basica carregado(s).`;
+    }
+    renderOilTab();
+  } catch (error) {
+    console.warn("Falha ao ler relatorio de troca de oleo", error);
+    status.textContent = "Nao foi possivel ler o relatorio enviado.";
+  }
+}
+
+function buildOilPrintHtml() {
+  const records = filteredOilRecords();
+  const data = computeOilIndicators(records);
+  const cfg = OIL_SERVICES[selectedOilServiceKey()];
+  const generatedAt = new Date().toLocaleString("pt-BR");
+  const fmt = (n, dec = 0) => n.toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  const periodLabel = data.dailySeries.length
+    ? `${formatDate(data.dailySeries[0].date)} a ${formatDate(data.dailySeries[data.dailySeries.length - 1].date)}`
+    : "--";
+
+  const trackList = (rows, unit, maxVal) =>
+    rows.length
+      ? rows
+          .map(
+            (item) => `
+              <div class="print-track-row">
+                <div><strong>${escapeHtml(item.name)}</strong><span>${item.value.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}${unit}</span></div>
+                <div class="print-track"><div style="width:${Math.max(4, (item.value / maxVal) * 100)}%"></div></div>
+              </div>
+            `
+          )
+          .join("")
+      : `<div class="empty">Sem dados no periodo.</div>`;
+
+  const weekdayRows = data.weekdayAverages.map((w) => ({ name: w.name, value: w.average }));
+  const maxWeekday = Math.max(1, ...weekdayRows.map((w) => w.value));
+  const secondaryTitle = cfg.hasProduct ? "Consumo por tipo de oleo" : "Distribuicao por compartimento";
+  const secondaryUnit = cfg.hasProduct ? " L" : "";
+  const secondaryRows = cfg.hasProduct
+    ? data.productList.slice(0, 10).map((p) => ({ name: p.name, value: p.count }))
+    : data.compartmentList.slice(0, 10).map((c) => ({ name: c.name, value: c.count }));
+  const maxSecondary = Math.max(1, ...secondaryRows.map((r) => r.value));
+  const vehicleRows = data.vehicleList.slice(0, 10).map((v) => ({ name: v.name, value: v.count }));
+  const maxVehicle = Math.max(1, ...vehicleRows.map((v) => v.value));
+
+  const compTotal = data.compartmentList.reduce((sum, c) => sum + c.count, 0);
+  let cursor = 0;
+  const compSegments = data.compartmentList
+    .slice(0, 8)
+    .map((c) => {
+      const start = cursor;
+      cursor += compTotal ? (c.count / compTotal) * 100 : 0;
+      return `${c.color} ${start}% ${cursor}%`;
+    })
+    .join(", ");
+  const compLegend = data.compartmentList
+    .slice(0, 8)
+    .map((c) => `<div><i style="background:${c.color}"></i><strong>${escapeHtml(c.name)}</strong><span>${c.count} (${compTotal ? Math.round((c.count / compTotal) * 100) : 0}%)</span></div>`)
+    .join("");
+
+  const mechRows = data.mechanicList.length
+    ? data.mechanicList
+        .map(
+          (m) => `<tr><td>${escapeHtml(m.name)}</td><td>${m.count}</td>${cfg.hasProduct ? `<td>${m.liters.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</td>` : ""}<td>${m.avgDuration === null ? "--" : m.avgDuration}</td></tr>`
+        )
+        .join("")
+    : `<tr><td colspan="${cfg.hasProduct ? 4 : 3}">Sem servicos no periodo.</td></tr>`;
+
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Relatorio de Troca de Oleo</title>
+  <style>
+    body { margin: 0; padding: 12px; background: #eef2f6; color: #111827; font-family: Arial, Calibri, sans-serif; }
+    .no-print { max-width: 794px; margin: 0 auto 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; background: #fff; border: 1px solid #d9e1ea; border-radius: 8px; padding: 14px 18px; box-shadow: 0 4px 12px rgba(15,23,42,0.08); }
+    .btn-print { border: 0; border-radius: 6px; padding: 10px 16px; background: #0d6efd; color: #fff; font-weight: 800; cursor: pointer; }
+    .sheet { max-width: 794px; min-height: 1123px; margin: 0 auto; background: #fff; border-radius: 8px; padding: 14px; box-shadow: 0 0 12px rgba(15,23,42,0.12); }
+    .header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; border-bottom: 2px solid #111827; padding-bottom: 8px; margin-bottom: 9px; }
+    .header h1 { margin: 0 0 4px; font-size: 18px; text-transform: uppercase; }
+    .header p { margin: 1px 0; font-size: 10px; color: #475467; }
+    .meta { text-align: right; }
+    .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-bottom: 8px; }
+    .metric { border: 1px solid #d9e1ea; border-left: 4px solid #1976d2; border-radius: 6px; padding: 8px; }
+    .metric span { display: block; color: #475467; font-size: 9.5px; }
+    .metric strong { display: block; font-size: 20px; margin: 3px 0; }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .panel { border: 1px solid #d9e1ea; border-radius: 6px; padding: 8px; break-inside: avoid; }
+    .panel h2 { margin: 0 0 6px; font-size: 12px; }
+    .print-track-row { display: grid; gap: 3px; margin-bottom: 6px; }
+    .print-track-row div:first-child { display: flex; justify-content: space-between; gap: 8px; font-size: 9.5px; }
+    .print-track { height: 7px; background: #eef2f6; border-radius: 999px; overflow: hidden; }
+    .print-track div { height: 100%; background: #1976d2; border-radius: inherit; }
+    .print-pie-panel { display: grid; grid-template-columns: 104px 1fr; gap: 9px; align-items: center; }
+    .print-pie { width: 104px; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; position: relative; box-shadow: inset 0 0 0 1px rgba(15,23,42,0.1); }
+    .print-pie::after { content: ""; position: absolute; width: 48px; aspect-ratio: 1; border-radius: 50%; background: #fff; }
+    .print-pie span { position: relative; z-index: 1; font-size: 16px; font-weight: 900; }
+    .print-pie-legend { display: grid; gap: 4px; }
+    .print-pie-legend div { display: grid; grid-template-columns: 8px 1fr auto; gap: 5px; align-items: center; font-size: 8.8px; color: #475467; }
+    .print-pie-legend i { width: 8px; height: 8px; border-radius: 999px; }
+    .print-pie-legend strong { color: #111827; overflow-wrap: anywhere; }
+    table { width: 100%; border-collapse: collapse; font-size: 8.8px; }
+    th, td { border: 1px solid #d9e1ea; padding: 3px 4px; text-align: left; vertical-align: top; }
+    th { background: #f1f5f9; text-transform: uppercase; font-size: 8px; }
+    .wide { grid-column: 1 / -1; }
+    .empty { color: #667085; font-size: 10px; padding: 7px; border: 1px dashed #cbd5e1; border-radius: 6px; }
+    @media print {
+      body { padding: 0; background: #fff; }
+      .no-print { display: none !important; }
+      .sheet { box-shadow: none; border-radius: 0; max-width: 100%; min-height: auto; padding: 0; }
+      @page { size: A4 portrait; margin: 1cm; }
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <p style="margin:0"><strong>Relatorio de ${escapeHtml(cfg.label.toLowerCase())} pronto.</strong><br><span style="font-size:12px;color:#475467">Use o botao para imprimir ou salvar em PDF. Formato sugerido: A4 retrato.</span></p>
+    <button class="btn-print" onclick="window.print()">Imprimir PDF</button>
+  </div>
+  <main class="sheet">
+    <header class="header">
+      <div>
+        <h1>Relatorio de ${escapeHtml(cfg.label)}</h1>
+        <p>CRV INDUSTRIAL | Periodo: ${escapeHtml(periodLabel)}</p>
+        <p>Relatorio base: ${escapeHtml(oilFileName || "--")}</p>
+      </div>
+      <div class="meta">
+        <p>Gerado em: ${escapeHtml(generatedAt)}</p>
+        <p>Veiculos atendidos: ${data.vehicles}</p>
+        <p>${cfg.hasProduct ? `Oleo mais usado: ${escapeHtml(data.topOil)}` : `Compartimento top: ${escapeHtml(data.compartmentList.length ? data.compartmentList[0].name : "--")}`}</p>
+      </div>
+    </header>
+    <section class="metric-grid">
+      <article class="metric"><span>${cfg.nounPlural} no periodo</span><strong>${fmt(data.total)}</strong><span>${data.distinctDays} dia(s)</span></article>
+      <article class="metric"><span>Media por dia</span><strong>${fmt(data.dailyAverage, 1)}</strong><span>Dias com servico</span></article>
+      ${cfg.hasProduct
+        ? `<article class="metric"><span>Litros trocados</span><strong>${fmt(data.liters, 1)}</strong><span>${fmt(data.litersAvg, 1)} L/troca</span></article>`
+        : `<article class="metric"><span>Veiculos atendidos</span><strong>${fmt(data.vehicles)}</strong><span>Frotas distintas</span></article>`}
+      <article class="metric"><span>Tempo medio</span><strong>${fmt(data.avgDuration)}</strong><span>Minutos por servico</span></article>
+    </section>
+    <section class="grid">
+      <article class="panel"><h2>Media por dia da semana</h2>${trackList(weekdayRows, "/dia", maxWeekday)}</article>
+      <article class="panel"><h2>${secondaryTitle}</h2>${trackList(secondaryRows, secondaryUnit, maxSecondary)}</article>
+      <article class="panel"><h2>${cfg.nounPlural} por compartimento</h2>${compTotal ? `<div class="print-pie-panel"><div class="print-pie" style="background: conic-gradient(${compSegments})"><span>${compTotal}</span></div><div class="print-pie-legend">${compLegend}</div></div>` : `<div class="empty">Sem servicos no periodo.</div>`}</article>
+      <article class="panel"><h2>Ranking de veiculos</h2>${trackList(vehicleRows, "", maxVehicle)}</article>
+      <article class="panel wide">
+        <h2>Produtividade por mecanico</h2>
+        <table>
+          <thead><tr><th>Mecanico</th><th>${cfg.nounPlural}</th>${cfg.hasProduct ? "<th>Litros</th>" : ""}<th>Tempo medio (min)</th></tr></thead>
+          <tbody>${mechRows}</tbody>
+        </table>
+      </article>
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
+function openOilPrintReport() {
+  if (!oilRecords.length) {
+    alert("Envie um relatorio de execucao antes de gerar o PDF.");
+    return;
+  }
+  const reportWindow = window.open("", "_blank");
+  if (!reportWindow) return;
+  reportWindow.document.open();
+  reportWindow.document.write(buildOilPrintHtml());
+  reportWindow.document.close();
+}
+
+document.querySelector("#oil-upload").addEventListener("change", handleOilUpload);
+document.querySelector("#oil-service-select").addEventListener("change", renderOilTab);
+document.querySelector("#oil-print").addEventListener("click", openOilPrintReport);
+document.querySelector("#oil-date-min").addEventListener("change", renderOilTab);
+document.querySelector("#oil-date-max").addEventListener("change", renderOilTab);
+document.querySelector("#oil-clear-filter").addEventListener("click", () => {
+  document.querySelector("#oil-date-min").value = "";
+  document.querySelector("#oil-date-max").value = "";
+  renderOilTab();
+});
 
 document.querySelector("#analysis-upload").addEventListener("change", handleAnalysisUpload);
 document.querySelector("#print-dashboard").addEventListener("click", openDashboardPrintReport);
