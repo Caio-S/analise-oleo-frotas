@@ -2977,12 +2977,12 @@ function openOilPrintReport() {
   reportWindow.document.close();
 }
 
-document.querySelector("#oil-upload").addEventListener("change", handleOilUpload);
-document.querySelector("#oil-service-select").addEventListener("change", renderOilTab);
-document.querySelector("#oil-print").addEventListener("click", openOilPrintReport);
-document.querySelector("#oil-date-min").addEventListener("change", renderOilTab);
-document.querySelector("#oil-date-max").addEventListener("change", renderOilTab);
-document.querySelector("#oil-clear-filter").addEventListener("click", () => {
+document.querySelector("#oil-upload")?.addEventListener("change", handleOilUpload);
+document.querySelector("#oil-service-select")?.addEventListener("change", renderOilTab);
+document.querySelector("#oil-print")?.addEventListener("click", openOilPrintReport);
+document.querySelector("#oil-date-min")?.addEventListener("change", renderOilTab);
+document.querySelector("#oil-date-max")?.addEventListener("change", renderOilTab);
+document.querySelector("#oil-clear-filter")?.addEventListener("click", () => {
   document.querySelector("#oil-date-min").value = "";
   document.querySelector("#oil-date-max").value = "";
   renderOilTab();
@@ -3078,6 +3078,14 @@ document.querySelector("#schedule-add-form").addEventListener("submit", async (e
     return;
   }
 
+  const submitBtn = document.querySelector("#schedule-add-submit-btn");
+  const btnLabel = document.querySelector("#schedule-add-btn-label");
+  const btnSpinner = document.querySelector("#schedule-add-btn-spinner");
+  submitBtn.disabled = true;
+  btnLabel.hidden = true;
+  btnSpinner.hidden = false;
+  message.textContent = "Gravando no banco de dados...";
+
   try {
     for (const fleetCode of fleets) {
       const item = {
@@ -3093,13 +3101,19 @@ document.querySelector("#schedule-add-form").addEventListener("submit", async (e
     }
   } catch (error) {
     message.textContent = `Erro ao gravar programacao: ${explainScheduleError(error)}`;
+    submitBtn.disabled = false;
+    btnLabel.hidden = false;
+    btnSpinner.hidden = true;
     return;
   }
 
   scheduleAnchor = new Date(`${date}T12:00:00`);
-  message.textContent = `${fleets.length} servico(s) agendado(s).`;
+  message.textContent = `Salvo com sucesso: ${fleets.length} servico(s) agendado(s).`;
   event.target.reset();
   document.querySelector("#schedule-compartment").value = compartment;
+  submitBtn.disabled = false;
+  btnLabel.hidden = false;
+  btnSpinner.hidden = true;
   renderSchedule();
 });
 

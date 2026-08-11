@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Controle de Analise de Oleo de Frotas</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260811" />
   </head>
   <body>
     <aside class="sidebar app-private" hidden>
@@ -471,7 +471,10 @@
               Frota unica
               <input id="schedule-single-fleet" placeholder="60529" />
             </label>
-            <button class="primary-button" type="submit">Agendar</button>
+            <button class="primary-button" id="schedule-add-submit-btn" type="submit">
+              <span id="schedule-add-btn-label">Agendar</span>
+              <span id="schedule-add-btn-spinner" hidden> Aguarde...</span>
+            </button>
             <button class="secondary-button" id="open-batch-modal" type="button">Programar lote</button>
             <button class="danger-button admin-only" id="clear-all-schedule" type="button">Excluir toda programacao</button>
           </form>
@@ -700,6 +703,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=20260811"></script>
   </body>
 </html>
