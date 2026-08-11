@@ -1746,6 +1746,30 @@ function monthsFromToday(offset) {
   return toDateKey(date);
 }
 
+async function fetchAllScheduleRows(rangeStart, rangeEnd) {
+  const pageSize = 1000;
+  const all = [];
+  let page = 0;
+
+  while (true) {
+    const { data, error } = await supabaseClient
+      .from("programacao_coletas")
+      .select("*")
+      .gte("scheduled_date", rangeStart)
+      .lte("scheduled_date", rangeEnd)
+      .order("scheduled_date", { ascending: true })
+      .order("cod_frota", { ascending: true })
+      .range(page * pageSize, page * pageSize + pageSize - 1);
+
+    if (error) return { data: null, error };
+    all.push(...data);
+    if (data.length < pageSize) break;
+    page += 1;
+  }
+
+  return { data: all, error: null };
+}
+
 async function loadScheduleFromSupabase() {
   if (!supabaseClient) {
     scheduleDbEnabled = false;
@@ -1757,13 +1781,7 @@ async function loadScheduleFromSupabase() {
     return;
   }
 
-  const { data, error } = await supabaseClient
-    .from("programacao_coletas")
-    .select("*")
-    .gte("scheduled_date", monthsFromToday(-3))
-    .lte("scheduled_date", monthsFromToday(3))
-    .order("scheduled_date", { ascending: true })
-    .order("cod_frota", { ascending: true });
+  const { data, error } = await fetchAllScheduleRows(monthsFromToday(-3), monthsFromToday(3));
 
   if (error) {
     scheduleDbEnabled = false;
