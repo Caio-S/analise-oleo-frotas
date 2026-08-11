@@ -1740,6 +1740,12 @@ function setScheduleStorageStatus(message, isError = false) {
   }
 }
 
+function monthsFromToday(offset) {
+  const date = new Date();
+  date.setMonth(date.getMonth() + offset);
+  return toDateKey(date);
+}
+
 async function loadScheduleFromSupabase() {
   if (!supabaseClient) {
     scheduleDbEnabled = false;
@@ -1754,6 +1760,8 @@ async function loadScheduleFromSupabase() {
   const { data, error } = await supabaseClient
     .from("programacao_coletas")
     .select("*")
+    .gte("scheduled_date", monthsFromToday(-3))
+    .lte("scheduled_date", monthsFromToday(3))
     .order("scheduled_date", { ascending: true })
     .order("cod_frota", { ascending: true });
 
